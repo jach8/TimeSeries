@@ -75,7 +75,7 @@ y = pd.Series(...)  # Replace with your target Series
 analyzer = analyze_correlation(x, y, verbose=True)
 
 # Run the analysis
-results = analyzer.analyze()
+results = analyzer.analyze(ci=0.05)
 
 # Print the results
 print(results)
