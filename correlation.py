@@ -1,5 +1,6 @@
 import pandas as pd
 import numpy as np
+import warnings
 from statsmodels.tsa.vector_ar.var_model import VAR
 from statsmodels.tsa.stattools import grangercausalitytests
 from sklearn.preprocessing import StandardScaler
@@ -8,18 +9,20 @@ from itertools import combinations
 from sklearn.decomposition import PCA
 
 class analyze_correlation:
-    def __init__(self, x, y, verbose=False):
+    def __init__(self, x, y, decompose = True, verbose=False):
         """
         Initialize the analyze_correlation with features and target.
 
         Parameters:
         - x (pd.DataFrame): Features for analysis.
         - y (pd.Series): Target variable for causality and classification.
+        - decompose (bool): If True, perform PCA decomposition on the features. 
         - verbose (bool): If True, print detailed model metrics and updates.
         - max_iterations (int): Maximum number of iterations for VAR model fitting.
         """
         self.verbose = verbose
         self.cause = y.name
+        self.decmpose = decompose
         self.set_xy(x, y)
         
 
@@ -40,6 +43,27 @@ class analyze_correlation:
         # Deprecated: 
         df.index = df.index.to_period('D')
         return df
+    
+    def pca_decomposition(self, df, n_components = 3):
+        """
+        Perform PCA decomposition on the features in the dataframe .
+        
+        Args:
+            - df (pd.DataFrame): DataFrame to perform PCA decomposition on.
+            - n_components (int): Number of components to decompose to.
+        
+        Returns:
+            - pd.DataFrame: DataFrame with the PCA components.
+        """
+        if self.verbose: 
+            print(f"Performing PCA decomposition on the features...")
+        pca = PCA(n_components = n_components).fit(df)
+        df = pd.DataFrame(
+            pca.transform(df), 
+            columns=[f'PC{i}' for i in range(1, n_components + 1)], 
+            index=df.index
+        )
+        return df
 
     def set_xy(self, x, y):
         """
@@ -52,36 +76,37 @@ class analyze_correlation:
         """
         # Set scaler and feature names
         self.scaler = StandardScaler()
-        self.features = x.columns.to_list()
-        self.target = y.name  
         
         # Merge Endogenous (X) and Exogenous (Y) variables
-        df = x.merge(y, left_index=True, right_index=True).dropna()
-    
-        # Set the index to a period index
-        self.df = self.setup_period_index(df)
-        
-        # Feature DataFrame
-        self.x = self.df.drop(columns=[self.target]).copy()[self.features]
-        self.y = df[self.target]
-        
-        # ###Scaled DataFrame
-        self.df_scaled = pd.DataFrame(
-            self.scaler.fit_transform(self.df), 
-            columns=self.df.columns, 
-            index=self.df.index
+        # Set up the period index. 
+        df =self.setup_period_index( 
+            x.merge(y, left_index=True, right_index=True).dropna()
         )
         
         # # PCA Decomposition
-        # self.pca = PCA(n_components = 3).fit(self.df_scaled)
-        # self.df_scaled = pd.DataFrame(
-        #     self.pca.transform(self.df_scaled), 
-        #     columns=[f'PC{i}' for i in range(1, 4)], 
-        #     index=self.df_scaled.index
-        # )
-        # self.df_scaled[self.target] = self.y
-        # self.features = self.df_scaled.columns.to_list()
-        # self.df = self.df_scaled.copy()
+        if self.decmpose:
+            centered_x = x - x.mean()
+            # scaled 
+            self.df_scaled = pd.DataFrame(
+                self.scaler.fit_transform(centered_x), 
+                columns=x.columns, 
+                index=x.index
+            )
+            self.df_scaled = self.pca_decomposition(self.df_scaled)
+            self.features = self.df_scaled.columns.to_list()
+            self.df_scaled[y.name] = y.values
+            self.target = y.name
+            
+        else:
+            # ###Scaled DataFrame
+            self.df_scaled = pd.DataFrame(
+                self.scaler.fit_transform(x), 
+                columns=x.columns, 
+                index=x.index
+            )
+            self.df_scaled[y.name] = y.values
+            self.features = x.columns.to_list()
+            self.target = y.name  
         
         # Initialize the model  
         try: 
@@ -92,13 +117,13 @@ class analyze_correlation:
             self.model = None
         
         if self.verbose:
-            print(f"Dataframe shape: {self.df.shape}\n")
+            print(f"Dataframe shape: {df.shape}\n")
 
     def adf_test(self, timeseries, lag_method = 'AIC' ):
         """
         Perform Augmented Dickey-Fuller test for stationarity.
-        -   Null Hypothesis (H0): the time series has a unit root. 
-        -   Alternate Hypothesis (H1): the time series has no unit root
+        -   Null Hypothesis (H0): the time series has a unit root. (Non-Stationary)
+        -   Alternate Hypothesis (H1): the time series has no unit root (Stationary)
         
         Large p-values indicate a unit root in the timeseries, confirming its non-stationarity. 
         
@@ -109,13 +134,10 @@ class analyze_correlation:
                 - 'AIC' or 'BIC' minimize the corresponding information criterion to get the number of lags in the test.
                 - 't-stat': t-statistic: based on maxlag and drops a lag until the t-statistic on the last length is significant at the 95 % level.
                 - 'None': then number of lags is set to maxlag
-                
-            
-            
-        Returns:
-            p-value (float): P-value of the ADF test.
-        """
         
+        Returns:
+            p-value (float): P-value of the ADF test. (Probability that the null hypothesis is rejected. )
+        """    
         #Perform Dickey-Fuller test:
         dftest = adfuller(timeseries, autolag=lag_method)
         dfoutput = pd.Series(dftest[0:4], index=['Test Statistic','p-value','#Lags Used','Number of Observations Used'])
@@ -126,35 +148,38 @@ class analyze_correlation:
         return dfoutput['p-value']
     
     
-    # def check_stationarity(self, ci = 0.05):
-    #     """
-    #     Performs the Augmented Dickey-Fuller test on the features to check for stationarity.
-    #     -   If the p-value is less than the confidence interval (small p-value), the feature is stationary.
-    #     -   If the p-value is greater than the confidence interval (large p-value), the feature is non-stationary.
+    def __differnce_series(self, column, max_differences = 3):
+        """
+        Differencing a time series to make it stationary, using the Ad-Fuller test for stationarity. 
+        This function will difference the series until it is stationary or until the maximum number of differences is reached. 
         
-    #     Args: 
-    #         ci (float): Confidence interval for the test. default: 0.05
+        Args:
+            series (pd.Series): Time series to difference.
+            max_differences (int): Maximum number of times to difference the series.
         
-    #     """
-    #     if self.verbose:
-    #         print(f"Checking stationarity of features using ADF test at {ci} confidence level...")
-    #     stationary = []; non_stationary = []
-    #     for i in self.df.columns:
-    #         p = self.adf_test(self.df_scaled[i])
-    #         if p < ci:
-    #             stationary.append(i)
-    #         else:
-    #             non_stationary.append(i)
-    #             if self.verbose:
-    #                 print(f"{i} is not stationary, p-value: {p:.3f} Consider dropping or differencing the feature")
-        
-    #     self.features = stationary
-    #     if non_stationary != []:
-    #         if self.verbose:
-    #             print(f"\nNon-stationary features: {non_stationary}\n")
-    #     else:
-    #         if self.verbose:
-    #             print("All features are stationary.\n")
+        Returns:
+            pd.Series: Differenced time series.
+        """
+        diff_count = 0
+        # Try differencing the series until it is stationary. keep track of the number of differences. 
+        while diff_count <= max_differences:
+            try:
+                # Perform ADF test on the current series. 
+                series = self.df_scaled[column]
+                p = self.adf_test(series)
+                if p < 0.05:
+                    return series.diff().dropna()
+                else:
+                    diff_count += 1
+            except Exception as e:
+                if self.verbose:
+                    print(f"{column} Error in differencing series: {str(e)}")
+                return series
+        if diff_count > max_differences:
+            if self.verbose:
+                print(f"Series could not be made stationary after {max_differences} differences.")
+        return series
+    
 
     def check_stationarity(self, ci=0.05, max_differences=3):
         """
@@ -175,89 +200,15 @@ class analyze_correlation:
 
         stationary = []
         non_stationary = []
-        original_columns = list(self.df.columns)
+        original_columns = list(self.df_scaled.columns)
 
         for col in original_columns:
-            diff_count = 0
-            while diff_count <= max_differences:
-                try:
-                    series = self.df_scaled[col].dropna()
-                    result = adfuller(series)
-                    p_value = result[1]
-
-                    if p_value < ci:
-                        stationary.append(col)
-                        break
-                    else:
-                        # If not stationary, difference the series
-                        self.df_scaled[col] = self.df_scaled[col].diff().dropna()
-                        diff_count += 1
-                        if self.verbose:
-                            print(f"{col} is not stationary, applying differencing. P-value: {p_value:.3f}, Differences applied: {diff_count}")
-
-                except Exception as e:
-                    if self.verbose:
-                        print(f"Error in ADF test for column {col}: {str(e)}")
-                    non_stationary.append(col)
-                    break
-
-            if diff_count > max_differences:
-                non_stationary.append(col)
-                if self.verbose:
-                    print(f"{col} could not be made stationary after {max_differences} differences")
+            self.__differnce_series(column = col, max_differences = max_differences)
 
         self.features = stationary
+        print("All features are now stationary.\n")
         
-        if non_stationary:
-            if self.verbose:
-                print(f"\nNon-stationary features after attempting to make stationary: {non_stationary}\n")
-            raise ValueError(f"Features {non_stationary} remain non-stationary after {max_differences} differences.")
-        else:
-            if self.verbose:
-                print("All features are now stationary.\n")
-        
-        
-    # def _fit_var_model(self):
-    #     """ 
-    #     Fit a Vector Auto Regression Model to the features and target variable.
-        
-    #     Returns:
-    #         - 
-        
-    #     """
-    #     # x = self.df_scaled[self.features]
-    #     # y = self.df_scaled[self.target]
-    #     # model = VAR(endog=x, exog=y, freq = 'B', dates = x.index)
-    #     model = VAR(self.df_scaled)
-    #     try:
-    #         fit = model.fit(maxlags=10, ic='aic', )
-    #         self.model = fit
-    #         if self.verbose:
-    #             print(f'Var Fit Successfull with lags: {fit.k_ar}')
-    #         return fit
-    #     except np.linalg.LinAlgError as e:
-    #         if 'not positive definite' in str(e):
-    #             # Handle non-positive definite matrix:
-    #             # Option 1: Reduce lags
-    #             for lags in range(9, 2, -1):  # Try fewer lags
-    #                 try:
-    #                     if self.verbose:
-    #                         print(f"Trying fewer lags: {lags}")
-    #                     fit = model.fit(maxlags=lags, ic='aic')
-    #                     self.model = model.fit(maxlags=lags)
-    #                     if self.verbose:
-    #                         print(f'Adjusted VAR Model fitting successful (lags={lags})')
-    #                     return fit
-    #                 except np.linalg.LinAlgError:
-    #                     continue  # If still not working, try fewer lags
-    #         if self.verbose:
-    #             print(f"VAR model fitting failed due to non-positive definite matrix. Error: {str(e)}")
-    #     except Exception as e:  # Catch other exceptions
-    #         if self.verbose:
-    #             print(f"VAR model fitting failed to converge. Error: {str(e)}")
-    #         raise e
-    #     return None  # Return None if all attempts fail
-
+    
     def _fit_var_model(self):
         """ 
         Fit a Vector Auto Regression Model to the features and target variable.
@@ -332,24 +283,65 @@ class analyze_correlation:
         granger_caused = []
         
         # Iterate through each of the features and check for causality        
-        for i in self.df.drop(columns=[self.target]).columns:
+        for i in self.df_scaled.drop(columns=[self.target]).columns:
             try:
                 # Error happens in the below function: 
-                # t = fit.test_causality(caused=self.cause, causing=i, kind='wald').summary()
-                t = fit.test_inst_causality(causing=i).summary()
+                t = fit.test_causality(caused=self.cause, causing=i, kind='wald').summary()
             except Exception as e:
+                if 'singular matrix' in str(e):
+                    warnings.warn(f"\n\n{i} Singular matrix encountered for Granger Causality test.\n\n")
+                    continue
                 raise ValueError(f"Error in Granger Causality test: {str(e)}")
                 
             if t[1][2].data < ci:
+                if t[1][2].data == 0:
+                    # Raise warnings for perfect causality
+                    warnings.warn(f"{i} Perfect Granger Causality detected for {self.cause}.")
                 granger_caused.append((self.cause, i))
                 if self.verbose:
                     confi = int(100 - (100*ci))
-                    # print(f'{i} Does Granger Cause {self.cause} @ {confi}% confidence level, p-value: {t[1][2].data}')
-                    print(f'{i} has an instantaneous causal effect on {self.cause} @ {confi}% confidence level, p-value: {t[1][2].data:.3f}')
+                    print(f'{i} Does Granger Cause {self.cause} @ {confi}% confidence level, p-value: {t[1][2].data}')
+
         
         if self.verbose:
             print(f"\nFinished Checking Granger Causality tests...\n")
         return granger_caused
+    
+    
+    def _instantaneous_causality(self, ci = 0.05):
+        """
+        Perform Instantaneous causality test (A form of Granger Causality test) from the Var Model Fit.
+        Instantaneous causality reflects a non-zero correlation between the variables in the system. 
+        
+        
+        """
+        if self.verbose:
+            print(f"Checking For Instaneous Causality...\n")
+    
+        fit = self.model
+        
+        # Columns to check for causality
+        instaneous_cause = []
+        
+        # Iterate through each of the features and check for causality        
+        for i in self.df_scaled.drop(columns=[self.target]).columns:
+            try:
+                t = fit.test_inst_causality(causing=i).summary()
+            except Exception as e:
+                raise ValueError(f"{i} Error in Instaneous Causality test: {str(e)}")
+                
+            if t[1][2].data < ci:
+                if t[1][2].data == 0:
+                    # Raise warnings for perfect causality
+                    warnings.warn(f"{i} Perfect Instaneous Causality detected for {self.cause}.")
+                instaneous_cause.append((self.cause, i))
+                if self.verbose:
+                    confi = int(100 - (100*ci))
+                    print(f'{i} has an instantaneous causal effect on {self.cause} @ {confi}% confidence level, p-value: {t[1][2].data}')
+        
+        if self.verbose:
+            print(f"\nFinished Checking Instaneous Causality...\n")
+        return instaneous_cause
 
     def _contemporaneous_causality(self, ci = 0.05):
         """
@@ -386,10 +378,8 @@ class analyze_correlation:
             if t[1][0]['ssr_ftest'][1] > ci:
                 contemporaneous_causality.append((target, caused))
                 if self.verbose:
-                    print(f'{caused} Does Contemporaneously Cause {target} @ {int(100 - (100*ci))}% confidence level, p-value: {t[1][0]["ssr_ftest"][1]:.3f}')
+                    print(f'{caused} Does Contemporaneously Cause {target} @ {int(100 - (100*ci))}% confidence level, p-value: {t[1][0]["ssr_ftest"][1]}')
         return contemporaneous_causality
-
-    
 
     def analyze(self, ci = 0.05):
         """
@@ -402,6 +392,7 @@ class analyze_correlation:
             "stationarity_tests": self.check_stationarity(ci),
             "var_model": self.model,
             "granger_causality": self._granger_causality(ci),
+            "instantaneous_causality": self._instantaneous_causality(ci),
             # "contemporaneous_causality": self._contemporaneous_causality(),
         }
 
@@ -417,6 +408,8 @@ if __name__ == "__main__":
     stocks = d.Optionsdb.all_stocks
     stock = np.random.choice(stocks)
     x, y  = d._returnxy(stock, keep_close=False)
+    # Remove all columns with 'chng' in the name
+    x = x[[i for i in x.columns if 'chng' not in i]]
     random_features = np.random.choice(x.columns, 5)
     x = x[random_features]
     
@@ -424,10 +417,12 @@ if __name__ == "__main__":
     y.name = '$' + str(stock).upper()
     a = analyze_correlation(x, y, verbose=True)
     results = a.analyze(ci = 0.1)
+    b = analyze_correlation(x, y, verbose=True, decompose=False)
+    results = b.analyze(ci = 0.1)
     
     # print(a.model.summary())
     
-    d.close_connection()
+    # d.close_connection()
     ###########################################################
     # from pickle import dump, load
     # data = load(open('examples/data/data.pkl', 'rb'))
@@ -439,7 +434,6 @@ if __name__ == "__main__":
     # print(results)
     
     ###########################################################
-    # np.random.seed(1)
     # n = 500
     # indexvals = np.arange(n)    
     # x = np.random.normal(n, 1, size = (n, 2))
