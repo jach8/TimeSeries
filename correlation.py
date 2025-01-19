@@ -2,11 +2,11 @@ import pandas as pd
 import numpy as np
 import warnings
 from statsmodels.tsa.vector_ar.var_model import VAR
-from statsmodels.tsa.stattools import grangercausalitytests
 from sklearn.preprocessing import StandardScaler
 from statsmodels.tsa.stattools import adfuller
 from itertools import combinations
 from sklearn.decomposition import PCA
+from granger import grangercausalitytests
 
 class analyze_correlation:
     def __init__(self, x, y, decompose = True, verbose=False):
@@ -108,16 +108,17 @@ class analyze_correlation:
             self.features = x.columns.to_list()
             self.target = y.name  
         
-        # Initialize the model  
-        try: 
-            self.model = self._fit_var_model()
-        except Exception as e:
-            if self.verbose:
-                print(f"Error in fitting the VAR model: {str(e)}")
-            self.model = None
+        # # Initialize the model  
+        # try: 
+        #     self.check_stationarity()
+        #     self.model = self._fit_var_model()
+        # except Exception as e:
+        #     if self.verbose:
+        #         print(f"Error in fitting the VAR model: {str(e)}")
+        #     self.model = None
         
-        if self.verbose:
-            print(f"Dataframe shape: {df.shape}\n")
+        # if self.verbose:
+        #     print(f"Dataframe shape: {df.shape}\n")
 
     def adf_test(self, timeseries, lag_method = 'AIC' ):
         """
@@ -146,41 +147,51 @@ class analyze_correlation:
         # return pd.DataFrame(dfoutput, columns = ['ADF Test']).round(2)        
         return dfoutput['p-value']
     
-    
-    def __differnce_series(self, column, significance_level = 0.05, max_differences = 3):
+        
+    def __differnce_series(self, column, significance_level=0.05, max_differences=5):
         """
-        Differencing a time series to make it stationary, using the Ad-Fuller test for stationarity. 
-        This function will difference the series until it is stationary or until the maximum number of differences is reached. 
-        
+        Difference a time series to make it stationary, using the ADF test for stationarity.
+        This function will difference the series until it is stationary or until the maximum number of differences is reached.
+
         Args:
-            series (pd.Series): Time series to difference.
+            column (str): The column name in self.df_scaled to difference.
+            significance_level (float): P-value threshold for considering a series stationary.
             max_differences (int): Maximum number of times to difference the series.
-        
+
         Returns:
-            pd.Series: Differenced time series.
+            None: Modifies self.df_scaled in-place.
+
+        Raises:
+            ValueError: If the series cannot be made stationary within max_differences.
         """
         diff_count = 0
-        # Try differencing the series until it is stationary. keep track of the number of differences. 
+        original_column = column  # Store the original column name for reference
         while diff_count <= max_differences:
+            series = self.df_scaled[column].dropna()
             try:
-                # Perform ADF test on the current series. 
-                series = self.df_scaled[column]
-                p = self.adf_test(series)
-                # If p-value is small, the series is stationary
-                if p < significance_level:
-                    return column
+                p_value = self.adf_test(series)
+                if p_value < significance_level:
+                    if diff_count > 0:
+                        # Rename the column in df_scaled to reflect differencing
+                        self.df_scaled.rename(columns={column: original_column + f'_diff_{diff_count}'}, inplace=True)
+                    return  # Series is now stationary, no need to return anything as we modify in-place
                 else:
+                    # Difference the series
                     diff_count += 1
-                    series = series.diff().dropna()
+                    column = original_column + f'_diff_{diff_count}'  # New column name
+                    self.df_scaled[column] = series.diff().dropna()
+                    self.df_scaled.drop(columns=[original_column], inplace=True)  # Drop the original column
+                    if self.verbose:
+                        print(f"Differenced {original_column} ({diff_count} times) --> new_name: {column}, p-value: {p_value:.3f}")
             except Exception as e:
                 if self.verbose:
-                    print(f"{column} Error in differencing series: {str(e)}")
-                return series
+                    print(f"Error in differencing series {original_column}: {str(e)}")
+                return  # Exit the function on exception
+
         if diff_count > max_differences:
             if self.verbose:
-                print(f"Series could not be made stationary after {max_differences} differences.")
-            return None
-    
+                print(f"Series {original_column} could not be made stationary after {max_differences} differences.")
+            raise ValueError(f"Series {original_column} remains non-stationary after {max_differences} differences.")
 
     def check_stationarity(self, significance_level=0.05, max_differences=3):
         """
@@ -208,10 +219,14 @@ class analyze_correlation:
                 column = col, 
                 significance_level=significance_level,
                 max_differences = max_differences
-        )
+            )
 
-        self.features = stationary
+        # Reset features after differencing 
+        self.features = self.df_scaled.drop(columns=[self.target]).columns.to_list()
+        self.df_scaled = self.df_scaled.dropna()
+        print('\n\n',self.features, '\n\n')
         print("All features are now stationary.\n")
+        return self.df_scaled
         
     
     def _fit_var_model(self):
@@ -232,6 +247,7 @@ class analyze_correlation:
                         fit = model.fit(maxlags=lags,trend = 'ct')
                         if self.verbose:
                             print(f'VAR Model Fit Successful with {lags} lags on attempt {attempt + 1}')
+                        self.model = fit
                         return  fit
                 except np.linalg.LinAlgError as e:
                     if 'not positive definite' in str(e):
@@ -286,9 +302,10 @@ class analyze_correlation:
         
         # Columns to check for causality
         granger_caused = []
-        
+                
         # Iterate through each of the features and check for causality        
-        for i in self.df_scaled.drop(columns=[self.target]).columns:
+        # for i in self.df_scaled.drop(columns=[self.target]).columns:
+        for i in self.features:
             try:
                 # Error happens in the below function: 
                 t = fit.test_causality(caused=self.cause, causing=i, kind='wald').summary()
@@ -330,7 +347,8 @@ class analyze_correlation:
         instaneous_cause = []
         
         # Iterate through each of the features and check for causality        
-        for i in self.df_scaled.drop(columns=[self.target]).columns:
+        # for i in self.df_scaled.drop(columns=[self.target]).columns:
+        for i in self.features:
             try:
                 t = fit.test_inst_causality(causing=i).summary()
             except Exception as e:
@@ -374,8 +392,10 @@ class analyze_correlation:
         Returns
             - list: List of tuples containing the features that contemporaneously cause the target variable.
         """
+        if self.verbose: 
+            print(f"Checking for Contemporaneous Causality...\n")
         # Get a list of tuples with one of the values being: target
-        checks = combinations(self.df.columns.to_list(), 2)
+        checks = combinations(self.df_scaled.columns.to_list(), 2)
         checks = [i for i in checks if self.cause in i]
         checks = [(i, j) for i, j in checks if j == self.cause]
         contemporaneous_causality = []
@@ -386,6 +406,8 @@ class analyze_correlation:
                 if self.verbose:
                     cl = int(100 - (100*significance_level))
                     print(f'{caused} Does Contemporaneously Cause {target} @ {cl}% confidence level, p-value: {t[1][0]["ssr_ftest"][1]}')
+        if self.verbose:
+            print(f"\nFinished Checking Contemporaneous Causality...\n")
         return contemporaneous_causality
 
     def analyze(self, significance_level = 0.05):
@@ -397,10 +419,10 @@ class analyze_correlation:
         """
         return {
             "stationarity_tests": self.check_stationarity(significance_level=significance_level),
-            "var_model": self.model,
+            "var_model": self._fit_var_model(),
             "granger_causality": self._granger_causality(significance_level),
             "instantaneous_causality": self._instantaneous_causality(significance_level),
-            # "contemporaneous_causality": self._contemporaneous_causality(),
+            "contemporaneous_causality": self._contemporaneous_causality(),
         }
 
 
@@ -416,16 +438,16 @@ if __name__ == "__main__":
     stock = np.random.choice(stocks)
     x, y  = d._returnxy(stock, keep_close=False)
     # Remove all columns with 'chng' in the name
-    x = x[[i for i in x.columns if 'chng' not in i]]
-    random_features = np.random.choice(x.columns, 5)
+    # x = x[[i for i in x.columns if 'chng' not in i]]
+    random_features = np.random.choice(x.columns, 15, replace = False)
     x = x[random_features]
     
     
     y.name = '$' + str(stock).upper()
     a = analyze_correlation(x, y, verbose=True)
-    results = a.analyze(significance_level = 0.1)
+    results = a.analyze(significance_level = 0.01)
     b = analyze_correlation(x, y, verbose=True, decompose=False)
-    results = b.analyze(significance_level = 0.1)
+    results = b.analyze(significance_level = 0.01)
     
     # print(a.model.summary())
     
