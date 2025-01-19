@@ -129,7 +129,6 @@ class analyze_correlation:
         
         Args:
             timeseries (pd.Series): Time series data to test for stationarity.
-            ci (float): Confidence interval for the test.
             lag_method (str): Method to use for determining the number of lags in the test:
                 - 'AIC' or 'BIC' minimize the corresponding information criterion to get the number of lags in the test.
                 - 't-stat': t-statistic: based on maxlag and drops a lag until the t-statistic on the last length is significant at the 95 % level.
@@ -148,7 +147,7 @@ class analyze_correlation:
         return dfoutput['p-value']
     
     
-    def __differnce_series(self, column, max_differences = 3):
+    def __differnce_series(self, column, significance_level = 0.05, max_differences = 3):
         """
         Differencing a time series to make it stationary, using the Ad-Fuller test for stationarity. 
         This function will difference the series until it is stationary or until the maximum number of differences is reached. 
@@ -167,10 +166,12 @@ class analyze_correlation:
                 # Perform ADF test on the current series. 
                 series = self.df_scaled[column]
                 p = self.adf_test(series)
-                if p < 0.05:
-                    return series.diff().dropna()
+                # If p-value is small, the series is stationary
+                if p < significance_level:
+                    return column
                 else:
                     diff_count += 1
+                    series = series.diff().dropna()
             except Exception as e:
                 if self.verbose:
                     print(f"{column} Error in differencing series: {str(e)}")
@@ -178,10 +179,10 @@ class analyze_correlation:
         if diff_count > max_differences:
             if self.verbose:
                 print(f"Series could not be made stationary after {max_differences} differences.")
-        return series
+            return None
     
 
-    def check_stationarity(self, ci=0.05, max_differences=3):
+    def check_stationarity(self, significance_level=0.05, max_differences=3):
         """
         Performs the Augmented Dickey-Fuller test on the features to check for stationarity.
         - If the p-value is less than the confidence interval (small p-value), the feature is stationary.
@@ -189,21 +190,25 @@ class analyze_correlation:
         This function will attempt to make non-stationary series stationary by differencing.
 
         Args: 
-            ci (float): Confidence interval for the test. Default: 0.05
+            significance_level (float): Significance level for ADF test. Default: 0.05
             max_differences (int): Maximum number of times to difference a feature. Default: 3
 
         Raises:
             ValueError: If the number of differences exceeds max_differences for any feature.
         """
         if self.verbose:
-            print(f"Checking stationarity of features using ADF test at {ci} confidence level...")
+            print(f"Checking stationarity of features using ADF test at {significance_level} confidence level...")
 
         stationary = []
         non_stationary = []
         original_columns = list(self.df_scaled.columns)
 
         for col in original_columns:
-            self.__differnce_series(column = col, max_differences = max_differences)
+            self.__differnce_series(
+                column = col, 
+                significance_level=significance_level,
+                max_differences = max_differences
+        )
 
         self.features = stationary
         print("All features are now stationary.\n")
@@ -261,7 +266,7 @@ class analyze_correlation:
                 print(f"Fatal Error: An exception occurred outside fitting loop: {str(e)}")
             raise SystemExit(f"Unexpected error in VAR model fitting. Program terminated: {str(e)}")
     
-    def _granger_causality(self, ci = 0.05):
+    def _granger_causality(self, significance_level = 0.05):
         """
         Perform Granger causality from the Var Model Fit. 
 
@@ -293,13 +298,13 @@ class analyze_correlation:
                     continue
                 raise ValueError(f"Error in Granger Causality test: {str(e)}")
                 
-            if t[1][2].data < ci:
+            if t[1][2].data < significance_level:
                 if t[1][2].data == 0:
                     # Raise warnings for perfect causality
                     warnings.warn(f"{i} Perfect Granger Causality detected for {self.cause}.")
                 granger_caused.append((self.cause, i))
                 if self.verbose:
-                    confi = int(100 - (100*ci))
+                    confi = int(100 - (100*significance_level))
                     print(f'{i} Does Granger Cause {self.cause} @ {confi}% confidence level, p-value: {t[1][2].data}')
 
         
@@ -308,11 +313,12 @@ class analyze_correlation:
         return granger_caused
     
     
-    def _instantaneous_causality(self, ci = 0.05):
+    def _instantaneous_causality(self, significance_level = 0.05):
         """
         Perform Instantaneous causality test (A form of Granger Causality test) from the Var Model Fit.
         Instantaneous causality reflects a non-zero correlation between the variables in the system. 
         
+        To Do: Handle the case where the matrix is singular. By definition the 
         
         """
         if self.verbose:
@@ -330,20 +336,20 @@ class analyze_correlation:
             except Exception as e:
                 raise ValueError(f"{i} Error in Instaneous Causality test: {str(e)}")
                 
-            if t[1][2].data < ci:
+            if t[1][2].data < significance_level:
                 if t[1][2].data == 0:
                     # Raise warnings for perfect causality
                     warnings.warn(f"{i} Perfect Instaneous Causality detected for {self.cause}.")
                 instaneous_cause.append((self.cause, i))
                 if self.verbose:
-                    confi = int(100 - (100*ci))
+                    confi = int(100 - (100*significance_level))
                     print(f'{i} has an instantaneous causal effect on {self.cause} @ {confi}% confidence level, p-value: {t[1][2].data}')
         
         if self.verbose:
             print(f"\nFinished Checking Instaneous Causality...\n")
         return instaneous_cause
 
-    def _contemporaneous_causality(self, ci = 0.05):
+    def _contemporaneous_causality(self, significance_level = 0.05):
         """
         Perform contemporaneous causality tests, using the grangercausalitytests function.
         
@@ -364,7 +370,7 @@ class analyze_correlation:
             i.e. x2 does not cause x1.
             
         Args:
-            ci (float): Confidence interval for the test.
+            significance_level (float): Confidence interval for the test.
         Returns
             - list: List of tuples containing the features that contemporaneously cause the target variable.
         """
@@ -375,13 +381,14 @@ class analyze_correlation:
         contemporaneous_causality = []
         for caused, target in checks:
             t = grangercausalitytests(self.df_scaled[[target, caused]], maxlag = 4)
-            if t[1][0]['ssr_ftest'][1] > ci:
+            if t[1][0]['ssr_ftest'][1] > significance_level:
                 contemporaneous_causality.append((target, caused))
                 if self.verbose:
-                    print(f'{caused} Does Contemporaneously Cause {target} @ {int(100 - (100*ci))}% confidence level, p-value: {t[1][0]["ssr_ftest"][1]}')
+                    cl = int(100 - (100*significance_level))
+                    print(f'{caused} Does Contemporaneously Cause {target} @ {cl}% confidence level, p-value: {t[1][0]["ssr_ftest"][1]}')
         return contemporaneous_causality
 
-    def analyze(self, ci = 0.05):
+    def analyze(self, significance_level = 0.05):
         """
         Run correlation analysis and return the results
 
@@ -389,10 +396,10 @@ class analyze_correlation:
         - dict: Dictionary containing the granger_causality and contemporaneous_causality results.
         """
         return {
-            "stationarity_tests": self.check_stationarity(ci),
+            "stationarity_tests": self.check_stationarity(significance_level=significance_level),
             "var_model": self.model,
-            "granger_causality": self._granger_causality(ci),
-            "instantaneous_causality": self._instantaneous_causality(ci),
+            "granger_causality": self._granger_causality(significance_level),
+            "instantaneous_causality": self._instantaneous_causality(significance_level),
             # "contemporaneous_causality": self._contemporaneous_causality(),
         }
 
@@ -416,9 +423,9 @@ if __name__ == "__main__":
     
     y.name = '$' + str(stock).upper()
     a = analyze_correlation(x, y, verbose=True)
-    results = a.analyze(ci = 0.1)
+    results = a.analyze(significance_level = 0.1)
     b = analyze_correlation(x, y, verbose=True, decompose=False)
-    results = b.analyze(ci = 0.1)
+    results = b.analyze(significance_level = 0.1)
     
     # print(a.model.summary())
     
