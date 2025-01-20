@@ -7,6 +7,7 @@ from statsmodels.tsa.stattools import adfuller
 from itertools import combinations
 from sklearn.decomposition import PCA
 from granger import grangercausalitytests
+from io import StringIO
 
 class analyze_correlation:
     def __init__(self, x, y, decompose = True, verbose=False):
@@ -22,7 +23,7 @@ class analyze_correlation:
         """
         self.verbose = verbose
         self.cause = y.name
-        self.decmpose = decompose
+        self.decompose = decompose
         self.set_xy(x, y)
         
 
@@ -84,7 +85,7 @@ class analyze_correlation:
         )
         
         # # PCA Decomposition
-        if self.decmpose:
+        if self.decompose:
             centered_x = x - x.mean()
             # scaled 
             self.df_scaled = pd.DataFrame(
@@ -224,63 +225,105 @@ class analyze_correlation:
         # Reset features after differencing 
         self.features = self.df_scaled.drop(columns=[self.target]).columns.to_list()
         self.df_scaled = self.df_scaled.dropna()
-        print('\n\n',self.features, '\n\n')
-        print("All features are now stationary.\n")
+        if self.verbose:
+            print("All features are now stationary.\n")
         return self.df_scaled
-        
     
-    def _fit_var_model(self):
-        """ 
-        Fit a Vector Auto Regression Model to the features and target variable.
+    
+    def _get_best_model(self, df, criterion='fpe', trend = 'ct'):
+        """
+        Fits the VAR model and selects the best model based on the the information criterion specified. 
+        Default Criterion is AIC (Alkaike Information Criterion)
+        This function will store the results internally as self.model_search_results
+        
+            In the VAR().select_order() method, we have 2 arguments:
+                1. maxlags: The maximum number of lags to check for the model. Not specifying this will check for lags automatically
+                2. trend: The trend parameter to include in the model. Options are ['n', 'c', 'ct', 'ctt']
+                    - 'n': No Deterministic Terms
+                    - 'c': Constant trend
+                    - 'ct': Constant and linear trend
+                    - 'ctt': Constant, linear and quadratic trend
+                If the model fails, try to run it with one of the availible trends
+
+        Args:
+            df (pd.DataFrame): DataFrame containing the features and target variable.
+            criterion (str, optional): Acceptable Criterions are ['aic','bic','fpe','hqic'],. Defaults to 'aic'.
+            maxlags
+            
+        Returns:
+            - lag (int): Number of lags for the best model, based on the criterion. 
+        """
+        
+        # Initialize the model search results  
+        order_df = VAR(df).select_order(trend = trend).summary()
+        # get html string
+        html_data = order_df.as_html()
+        # Wrap string in StringIO and convert to DataFrame
+        search_results = pd.read_html(
+            StringIO(html_data), header=0,
+        )[0].rename(
+            columns = {'Unnamed: 0': 'Lags'}
+        )
+        search_results.columns = [x.lower() for x in search_results.columns] 
+        # Store the search results
+        self.model_search_results = search_results
+        # The best model will have a * in the value. 
+        best_model = search_results.loc[search_results[criterion.lower()].str.contains('\*')]['lags'].values
+        return best_model
+        
+    def _fit_var_model(self, criterion='bic', trend='ct'):
+        """
+        Fit a Vector Auto Regression Model to the features and target variable, using the statsmodels VAR class.
+        Selects the best model based on the specified information criterion using the helper function _get_best_model.
+
+        Args:
+            criterion (str): Information criterion to use for model selection. Options are 'aic', 'bic', 'hqic', 'fpe'.
+                            Default is 'bic'.
+            trend (str): Type of trend to include in the model. Options are 'n', 'c', 'ct', 'ctt'. Default is 'ct'.
+
+        Returns:
+            - model: Best fitted VAR model based on the specified criterion.
 
         Raises:
-            - SystemExit: If the model can't be fitted after all attempts.
+            - SystemExit: If the model can't be fitted with the chosen trend and criterion.
         """
         try:
             model = VAR(self.df_scaled, exog=self.df_scaled[self.target])
-            trend_types = {'n', 'c', 'ct'}
             
-            max_attempts = 2  # Number of attempts to fit the model
-            for attempt in range(max_attempts):
-                try:
-                    for lags in range(max_attempts, 1, -1):  # Start with higher lags and reduce
-                        fit = model.fit(maxlags=lags,trend = 'ct')
-                        if self.verbose:
-                            print(f'VAR Model Fit Successful with {lags} lags on attempt {attempt + 1}')
-                        self.model = fit
-                        return  fit
-                except np.linalg.LinAlgError as e:
-                    if 'not positive definite' in str(e):
-                        if self.verbose:
-                            print(f"Non-positive definite matrix encountered on attempt {attempt + 1}. Error: {str(e)}")
-                        continue  # Continue to the next attempt with reduced lags
-                    else:
-                        if self.verbose:
-                            print(f"Unexpected linear algebra error on attempt {attempt + 1}. Error: {str(e)}")
-                        raise e  # Re-raise unexpected errors
-                except ValueError as ve:
-                    if "Insufficient degrees of freedom" in str(ve):
-                        if self.verbose:
-                            print(f"Insufficient degrees of freedom on attempt {attempt + 1}. Error: {str(ve)}")
-                        continue  # Try with fewer lags
-                    else:
-                        if self.verbose:
-                            print(f"Unexpected ValueError on attempt {attempt + 1}. Error: {str(ve)}")
-                        raise ve  # Re-raise unexpected errors
-                except Exception as e:
-                    if self.verbose:
-                        print(f"An unexpected error occurred on attempt {attempt + 1}. Error: {str(e)}")
-                    raise e  # Re-raise other exceptions
+            best_lags = self._get_best_model(self.df_scaled, criterion=criterion)
 
-            # If we've made it here, all attempts to fit the model have failed
+            # Fit the model with the best number of lags from _get_best_model
+            fit = model.fit(maxlags=int(best_lags), trend=trend)
+            
             if self.verbose:
-                print(f"Fatal Error: Failed to fit VAR model after {max_attempts} attempts.\n")
-            raise SystemExit("Could not fit VAR model. Program terminated.")
+                best_stats = self.model_search_results.iloc[int(best_lags)]  # -1 because index starts at 0, but lag starts at 1
+                print(f'Best VAR Model Fit with {best_lags} lags - Trend: {trend}, {criterion.upper()}: {best_stats[criterion]}')
+            
+            self.model = fit
+            return fit
 
-        except Exception as e:  # Catch any exception from outside the loop
+        except np.linalg.LinAlgError as e:
+            if 'not positive definite' in str(e):
+                if self.verbose:
+                    print(f"Non-positive definite matrix encountered. Error: {str(e)}")
+            else:
+                if self.verbose:
+                    print(f"Unexpected linear algebra error. Error: {str(e)}")
+                raise e
+        except ValueError as ve:
+            if "Insufficient degrees of freedom" in str(ve):
+                if self.verbose:
+                    print(f"Insufficient degrees of freedom. Error: {str(ve)}")
+            else:
+                if self.verbose:
+                    print(f"Unexpected ValueError. Error: {str(ve)}")
+                raise ve
+        except Exception as e:
             if self.verbose:
-                print(f"Fatal Error: An exception occurred outside fitting loop: {str(e)}")
-            raise SystemExit(f"Unexpected error in VAR model fitting. Program terminated: {str(e)}")
+                print(f"An unexpected error occurred. Error: {str(e)}")
+            raise SystemExit(f"Could not fit VAR model with trend {trend}. Program terminated: {str(e)}")
+
+
     
     def _granger_causality(self, significance_level = 0.05):
         """
@@ -398,7 +441,10 @@ class analyze_correlation:
         checks = combinations(self.df_scaled.columns.to_list(), 2)
         checks = [i for i in checks if self.cause in i]
         checks = [(i, j) for i, j in checks if j == self.cause]
+        
+        # Save contemporaneous causality to a list 
         contemporaneous_causality = []
+        
         for caused, target in checks:
             t = grangercausalitytests(self.df_scaled[[target, caused]], maxlag = 4)
             if t[1][0]['ssr_ftest'][1] > significance_level:

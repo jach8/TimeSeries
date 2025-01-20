@@ -248,28 +248,28 @@ def grangercausalitytests(x, maxlag, addconst=True, verbose=None):
 
 
 
-# Random Time Series 
-np.random.seed(1)
-n = 100
-indexvals = np.arange(n)    
-x = np.random.normal(n, 1, size = (n, 2))
+# # Random Time Series 
+# np.random.seed(1)
+# n = 100
+# indexvals = np.arange(n)    
+# x = np.random.normal(n, 1, size = (n, 2))
 
-# Granger Causality Test
-print(grangercausalitytests(x, 2))
+# # Granger Causality Test
+# print(grangercausalitytests(x, 2))
 
-# Output
-# Granger Causality
-# number of lags (no zero) 1
-# ssr based F test:         F=0.1180  , p=0.7320  , df_denom=96, df_num=1
-# ssr based chi2 test:   chi2=0.1217  , p=0.7272  , df=1
-# likelihood ratio test: chi2=0.1216  , p=0.7273  , df=1
-# parameter F test:         F=0.1180  , p=0.7320  , df_denom=96, df_num=1
+# # Output
+# # Granger Causality
+# # number of lags (no zero) 1
+# # ssr based F test:         F=0.1180  , p=0.7320  , df_denom=96, df_num=1
+# # ssr based chi2 test:   chi2=0.1217  , p=0.7272  , df=1
+# # likelihood ratio test: chi2=0.1216  , p=0.7273  , df=1
+# # parameter F test:         F=0.1180  , p=0.7320  , df_denom=96, df_num=1
 
-# Granger Causality
-# number of lags (no zero) 2
-# ssr based F test:         F=0.8470  , p=0.4320  , df_denom=93, df_num=2
-# ssr based chi2 test:   chi2=1.7851  , p=0.4096  , df=2
-# likelihood ratio test: chi2=1.7691  , p=0.4129  , df=2
-# parameter F test:         F=0.8470  , p=0.4320  , df_denom=93, df_num=2
+# # Granger Causality
+# # number of lags (no zero) 2
+# # ssr based F test:         F=0.8470  , p=0.4320  , df_denom=93, df_num=2
+# # ssr based chi2 test:   chi2=1.7851  , p=0.4096  , df=2
+# # likelihood ratio test: chi2=1.7691  , p=0.4129  , df=2
+# # parameter F test:         F=0.8470  , p=0.4320  , df_denom=93, df_num=2
 
 

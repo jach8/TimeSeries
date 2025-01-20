@@ -6,7 +6,7 @@ This project contains Python scripts for analyzing and modeling time series data
 
 - `timeseries.py`: Contains the `TimeSeriesAnalyzer` class for performing time series analysis, including stationarity tests, VAR modeling, and Granger causality tests.
 - `arima.py`: Contains the `arima_trend` class for handling time series data operations, including conversion, stationarity testing, and ARIMA/ARMA modeling.
-- `correlation.py`: Contains the `analyze_correlation` class for performing correlation analysis, including stationarity tests, VAR modeling, and Granger causality tests.
+- `correlation.py`: Contains the `analyze_correlation` class for performing correlation analysis, including stationarity tests, PCA decomposition, VAR modeling, and Granger causality tests.
 
 ## Usage
 
@@ -72,10 +72,10 @@ x = pd.DataFrame(...)  # Replace with your features DataFrame
 y = pd.Series(...)  # Replace with your target Series
 
 # Initialize the analyzer
-analyzer = analyze_correlation(x, y, verbose=True)
+analyzer = analyze_correlation(x, y, decompose=True, verbose=True)
 
 # Run the analysis
-results = analyzer.analyze(ci=0.05)
+results = analyzer.analyze(significance_level=0.05)
 
 # Print the results
 print(results)
