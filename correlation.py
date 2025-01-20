@@ -109,6 +109,7 @@ class analyze_correlation:
             self.features = x.columns.to_list()
             self.target = y.name  
         
+        self.feature_change = False
         # # Initialize the model  
         # try: 
         #     self.check_stationarity()
@@ -182,6 +183,7 @@ class analyze_correlation:
                     column = original_column + f'_diff_{diff_count}'  # New column name
                     self.df_scaled[column] = series.diff().dropna()
                     self.df_scaled.drop(columns=[original_column], inplace=True)  # Drop the original column
+                    self.feature_change = True
                     if self.verbose:
                         print(f"Differenced {original_column} ({diff_count} times) --> new_name: {column}, p-value: {p_value:.3f}")
             except Exception as e:
@@ -268,10 +270,15 @@ class analyze_correlation:
         # Store the search results
         self.model_search_results = search_results
         # The best model will have a * in the value. 
-        best_model = search_results.loc[search_results[criterion.lower()].str.contains('\*')]['lags'].values
-        return best_model
+        best_model = search_results.loc[search_results[criterion.lower()].str.contains('\*')]['lags'].values[0]
+
+        if self.verbose:
+            print(f"Lag Model Selection based on {criterion.upper()} criterion: {best_model}")
         
-    def _fit_var_model(self, criterion='bic', trend='ct'):
+        return best_model
+
+
+    def _fit_var_model(self, criterion='fpe', trend='c'):
         """
         Fit a Vector Auto Regression Model to the features and target variable, using the statsmodels VAR class.
         Selects the best model based on the specified information criterion using the helper function _get_best_model.
@@ -279,7 +286,7 @@ class analyze_correlation:
         Args:
             criterion (str): Information criterion to use for model selection. Options are 'aic', 'bic', 'hqic', 'fpe'.
                             Default is 'bic'.
-            trend (str): Type of trend to include in the model. Options are 'n', 'c', 'ct', 'ctt'. Default is 'ct'.
+            trend (str): Type of trend to include in the model. Options are 'n', 'c', 'ct', 'ctt'. Default is 'c'.
 
         Returns:
             - model: Best fitted VAR model based on the specified criterion.
@@ -290,39 +297,26 @@ class analyze_correlation:
         try:
             model = VAR(self.df_scaled, exog=self.df_scaled[self.target])
             
-            best_lags = self._get_best_model(self.df_scaled, criterion=criterion)
+            best_lag = self._get_best_model(self.df_scaled, criterion=criterion)
 
             # Fit the model with the best number of lags from _get_best_model
-            fit = model.fit(maxlags=int(best_lags), trend=trend)
+            fit = model.fit(maxlags=best_lag, trend=trend)
+            self.model = fit
             
             if self.verbose:
-                best_stats = self.model_search_results.iloc[int(best_lags)]  # -1 because index starts at 0, but lag starts at 1
-                print(f'Best VAR Model Fit with {best_lags} lags - Trend: {trend}, {criterion.upper()}: {best_stats[criterion]}')
-            
-            self.model = fit
+                # Note: Indexing should be adjusted because indices start at 0 and lags at 1
+                best_stats = self.model_search_results[self.model_search_results['lags'] == best_lag].iloc[0]
+                print(f'Best VAR Model Fit with {best_lag} lags - Trend: {trend}, {criterion.upper()}: {best_stats[criterion]}')
             return fit
 
-        except np.linalg.LinAlgError as e:
-            if 'not positive definite' in str(e):
-                if self.verbose:
-                    print(f"Non-positive definite matrix encountered. Error: {str(e)}")
-            else:
-                if self.verbose:
-                    print(f"Unexpected linear algebra error. Error: {str(e)}")
-                raise e
         except ValueError as ve:
-            if "Insufficient degrees of freedom" in str(ve):
-                if self.verbose:
-                    print(f"Insufficient degrees of freedom. Error: {str(ve)}")
-            else:
-                if self.verbose:
-                    print(f"Unexpected ValueError. Error: {str(ve)}")
-                raise ve
+            if self.verbose:
+                print(f"ValueError in fitting the VAR model: {str(ve)}")
+            raise SystemExit(f"Could not fit VAR model with trend {trend}. Program terminated due to: {str(ve)}")
         except Exception as e:
             if self.verbose:
-                print(f"An unexpected error occurred. Error: {str(e)}")
-            raise SystemExit(f"Could not fit VAR model with trend {trend}. Program terminated: {str(e)}")
-
+                print(f"Error in fitting the VAR model: {str(e)}")
+            raise SystemExit(f"Could not fit VAR model with trend {trend}. Program terminated due to: {str(e)}")
 
     
     def _granger_causality(self, significance_level = 0.05):
@@ -476,24 +470,24 @@ if __name__ == "__main__":
     print(""" 7.4: Earth, water, fire, air, ether, mind, spiritual intelligence and false ego; thus these are the eightfold divisions of my external energy.\n""")
     ###########################################################
     
-    import sys
-    sys.path.append("../Stocks")
-    from models.anom.stocks.connect import data
-    d = data('../Stocks/')
-    stocks = d.Optionsdb.all_stocks
-    stock = np.random.choice(stocks)
-    x, y  = d._returnxy(stock, keep_close=False)
-    # Remove all columns with 'chng' in the name
-    # x = x[[i for i in x.columns if 'chng' not in i]]
-    random_features = np.random.choice(x.columns, 15, replace = False)
-    x = x[random_features]
+    # import sys
+    # sys.path.append("../Stocks")
+    # from models.anom.stocks.connect import data
+    # d = data('../Stocks/')
+    # stocks = d.Optionsdb.all_stocks
+    # stock = np.random.choice(stocks)
+    # x, y  = d._returnxy(stock, keep_close=False)
+    # # Remove all columns with 'chng' in the name
+    # # x = x[[i for i in x.columns if 'chng' not in i]]
+    # random_features = np.random.choice(x.columns, 15, replace = False)
+    # x = x[random_features]
     
     
-    y.name = '$' + str(stock).upper()
-    a = analyze_correlation(x, y, verbose=True)
-    results = a.analyze(significance_level = 0.01)
-    b = analyze_correlation(x, y, verbose=True, decompose=False)
-    results = b.analyze(significance_level = 0.01)
+    # y.name = '$' + str(stock).upper()
+    # a = analyze_correlation(x, y, verbose=True)
+    # results = a.analyze(significance_level = 0.01)
+    # b = analyze_correlation(x, y, verbose=True, decompose=False)
+    # results = b.analyze(significance_level = 0.01)
     
     # print(a.model.summary())
     
@@ -510,28 +504,29 @@ if __name__ == "__main__":
     
     ###########################################################
     # n = 500
-    # indexvals = np.arange(n)    
-    # x = np.random.normal(n, 1, size = (n, 2))
+    # start_date = '2020-01-01'
+    # end_date = pd.Timedelta(days=n) + pd.to_datetime(start_date)
+    # dte_index = pd.date_range(start_date, end_date, freq='D')
+    # n = len(dte_index)
+    
+    # x = np.random.normal(n, 1, size = (n, 4))
     # y = np.random.normal(0, 1, size = n)
-    # dte_index = pd.DatetimeIndex(indexvals)
-    # df = pd.DataFrame(x, index = dte_index, columns = ['x1', 'x2'])
-    # df['x3'] = df['x1'] * 3.4 + df['x2'] * 2.3 + y * 0.5
-    # df['x4'] = df['x3'] + df['x2'].shift(1)
-    # df['x4'] = df['x4'].fillna(df['x4'].mean())
+
+    # df = pd.DataFrame(x, index = dte_index, columns = ['x1', 'x2', 'x3', 'x4'])
     # df['y'] = y
     
-    # ac = analyze_correlation(df[['x1', 'x2', 'x3']], df['y'], verbose=True)
+    # ac = analyze_correlation(df[['x1', 'x2', 'x3','x4']], df['y'], verbose=True)
     # results = ac.analyze()
     
     
     ########################################################### 
-    # import statsmodels.api as sm
-    # macrodata = sm.datasets.macrodata.load_pandas().data
-    # macrodata.index = pd.period_range('1959Q1', '2009Q3', freq='Q')
-    # macrodata.index = macrodata.index.to_timestamp()
-    # macrodata = macrodata.drop(columns = ['year', 'quarter'])
-    # macrodata = macrodata.diff().dropna()
-    # x = macrodata.drop(columns = 'realgdp')
-    # y = macrodata['realgdp']
-    # ac = analyze_correlation(x, y, verbose=True)
-    # results = ac.analyze()
+    import statsmodels.api as sm
+    macrodata = sm.datasets.macrodata.load_pandas().data
+    macrodata.index = pd.period_range('1959Q1', '2009Q3', freq='Q')
+    macrodata.index = macrodata.index.to_timestamp()
+    macrodata = macrodata.drop(columns = ['year', 'quarter'])
+    macrodata = macrodata.diff().dropna()
+    x = macrodata.drop(columns = 'realgdp')
+    y = macrodata['realgdp']
+    ac = analyze_correlation(x, y, verbose=True)
+    results = ac.analyze()

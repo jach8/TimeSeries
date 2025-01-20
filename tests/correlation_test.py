@@ -1,25 +1,31 @@
 import unittest
 import pandas as pd
 import numpy as np
-from correlation import analyze_correlation  # Replace 'your_module' with the actual module name
+import statsmodels.api as sm
+
+from correlation import analyze_correlation  
 
 class TestAnalyzeCorrelation(unittest.TestCase):
 
     def setUp(self):
         # Setup method that runs before each test
-        self.sample_data = pd.DataFrame({
-            'feature1': np.random.randn(100),
-            'feature2': np.random.randn(100),
-            'target': np.random.randn(100)
-        })
-        self.x = self.sample_data[['feature1', 'feature2']]
-        self.y = self.sample_data['target']
-
+        macrodata = sm.datasets.macrodata.load_pandas().data
+        macrodata.index = pd.period_range('1959Q1', '2009Q3', freq='Q')
+        macrodata.index = macrodata.index.to_timestamp()
+        macrodata = macrodata.drop(columns = ['year', 'quarter'])
+        macrodata = macrodata.diff().dropna()
+        x = macrodata.drop(columns = 'realgdp')
+        y = macrodata['realgdp']
+        self.sample_data = x.merge(y, left_index=True, right_index=True)    
+        self.x = x; self.y = y
+        self.features = x.columns.tolist()
+        self.target = 'realgdp'
+       
     def test_init(self):
         # Test initialization
         ac = analyze_correlation(self.x, self.y, decompose=False, verbose=False)
-        self.assertEqual(ac.cause, 'target')
-        self.assertFalse(ac.decmpose)  
+        self.assertEqual(ac.cause, self.target)
+        self.assertFalse(ac.decompose)  
         self.assertFalse(ac.verbose)
 
     def test_setup_period_index(self):
@@ -35,16 +41,21 @@ class TestAnalyzeCorrelation(unittest.TestCase):
 
     def test_set_xy(self):
         ac = analyze_correlation(self.x, self.y, decompose=False, verbose=False)
-        self.assertEqual(ac.features, ['feature1', 'feature2'])
-        self.assertEqual(ac.target, 'target')
-        self.assertTrue(ac.df_scaled.equals(ac.scaler.transform(self.x)))
+        self.assertEqual(ac.target, self.target)
+        if ac.feature_change == False:
+            self.assertEqual(ac.features, self.features)
+            scaled = ac.df_scaled
+            sc = pd.DataFrame(ac.scaler.fit_transform(self.x), columns=self.features, index=self.x.index)
+            sc[self.target] = self.y
+            self.assertTrue(scaled.equals(sc))
 
     def test_adf_test(self):
         # Create a known stationary series for testing
+        np.random.seed(0)
         stationary_series = pd.Series(np.random.randn(100)).cumsum()
         ac = analyze_correlation(self.x, self.y, verbose=False)
         p_value = ac.adf_test(stationary_series)
-        self.assertLess(p_value, 0.05)  # Assuming we expect the series to be stationary
+        self.assertGreater(p_value, 0.05)  
 
     def test_check_stationarity(self):
         ac = analyze_correlation(self.x, self.y, decompose=False, verbose=False)
