@@ -1,14 +1,16 @@
-import pandas as pd 
-import pandas_datareader.data as web
-import datetime as dt 
-import numpy as np 
-from statsmodels.tsa.stattools import adfuller
-from arch import arch_model
-from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
-from statsmodels.tsa.arima.model import ARIMA
 import re
 import warnings
-from typing import Dict, Optional, Tuple
+import numpy as np 
+import pandas as pd 
+import datetime as dt 
+from tqdm import tqdm 
+from arch import arch_model
+import matplotlib.pyplot as plt
+import pandas_datareader.data as web
+from statsmodels.tsa.arima.model import ARIMA
+from statsmodels.tsa.stattools import adfuller
+from typing import Dict, Optional, Tuple, Union
+from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 warnings.filterwarnings('ignore')
 
 class arima_trend:
@@ -53,95 +55,107 @@ class arima_trend:
         dfoutput = pd.Series(dftest[0:4], index=['Test Statistic','p-value','#Lags Used','Number of Observations Used'])
         for key,value in dftest[4].items():
             dfoutput[f'Critical Value ({key})'] = value
-        return pd.DataFrame(dfoutput, columns = ['ADF Test']).round(2)
+            
+        col_name = x.name + ' ADF Test' if type(x) == pd.Series else 'ADF Test'
+        return pd.DataFrame(dfoutput, columns = [col_name])
+    
+    
 
-    def arima_model(self, x: pd.DataFrame, max_order: int = 5, result_df: bool = True) -> Dict[str, Union[pd.DataFrame, ARIMA]]:
+    def arima_model(self, x: pd.DataFrame, maxord: dict = dict(p=5, d=0, q=5), result_df: bool = True) -> dict:
         """
+
         ARIMA model for time series data. 
         This function uses the max_order parameter to determine the optimal order of the ARIMA model.
-        The best model is selected based on the minimum mean squared error.
+        
+        The ARIMA model uses parameters to describe these three components:
+            p (autoregressive order): The number of lagged values used in the AR component
+            d (differencing order): The degree of differencing required for non-stationarity
+                - The model will difference the data d times to make it statistically stationary
+                - That means by passing in a difference series x, there is no need to difference the data
+            q (moving average order): The number of lagged errors used in the MA component
         
         Args:
             x (pd.DataFrame): Time series data to model.
-            max_order (int): Maximum order of the ARIMA model.
+            max_order (dict): dict with keys 'p', 'd', 'q' denoting the maximum value to use in ARIMA model. 
+                                default is {'p': 5, 'd': 2, 'q': 5}
             result_df (bool): Return the results dataframe if True, else return the best model.
         
         Returns:
             dict or ARIMA: Returns either a dictionary with results and model or the best model.
         """
+        if maxord is None:
+            maxord = {'p': 5, 'd': 2, 'q': 5}
+        
         x = self.get_series(x)
-        results = pd.DataFrame(columns = ['name', 'model', 'mse', 'mae', 'r2', 'aic', 'bic', 'hqic', 'adf'])
-        for p in range(1, max_order):
-            for q in range(1, max_order):
-                for d in range(2):
-                    try:
-                        model = ARIMA(x, order = (p, d, q)).fit()
-                        results = results.append({
-                            'name': x.columns[0], 
-                            'model': f'ARIMA({p}, {d}, {q})', 
-                            'mse': mean_squared_error(x, model.predict()),
-                            'mae': mean_absolute_error(x, model.predict()),
-                            'r2': r2_score(x, model.predict()),
-                            'aic': model.aic,
-                            'bic': model.bic,
-                            'hqic': model.hqic,
-                            'adf': adfuller(x)[1]
-                        }, ignore_index = True)
-                    except:
-                        pass
-        # return the best model
-        bm = results.sort_values(by = 'mse').iloc[0]
-        p, d, q = map(int, re.findall(r'\d+', bm['model']))
-        mod = ARIMA(x, order = (p, d, q)).fit()
-        if result_df:
-            return {'results': results, 'model': mod}
-        else:
-            return mod
+        
+        # Check for stationarity
+        _, p_value, _, _, _, _ = adfuller(x)
+        is_stationary = p_value < 0.05
+        max_d = maxord['d'] if not is_stationary else 0
+        print(f"Data is {'not ' if not is_stationary else ''}stationary")
 
-    def arma_model(self, x: pd.DataFrame, max_order: int, result_df: bool = True) -> Dict[str, Union[pd.DataFrame, ARIMA]]:
-        """
-        ARMA model for time series data.
-        This function uses the max_order parameter to determine the optimal order of the ARMA model.
-        The best model is selected based on the minimum mean squared error.
-        
-        Args:
-            x (pd.DataFrame): Time series data to model.
-            max_order (int): Maximum order of the ARMA model.
-            result_df (bool): Return the results dataframe if True, else return the best model
-        
-        Returns:
-            dict or ARIMA: Returns either a dictionary with results and model or the best model.
-        """
-        x = self.get_series(x)
-        results = pd.DataFrame(columns = ['name', 'model', 'mse', 'mae', 'r2', 'aic', 'bic', 'hqic', 'adf'])
+        # Generate model orders
+        p_range = np.arange(1, maxord['p'] + 1)
+        d_range = np.arange(max_d + 1)
+        q_range = np.arange(1, maxord['q'] + 1)
+        max_order = np.array(np.meshgrid(p_range, d_range, q_range)).T.reshape(-1, 3)
 
-        for p in range(1, max_order):
-            for q in range(1, max_order):
-                try:
-                    d = 0
-                    model = ARIMA(x, order = (p, d, q)).fit()
-                    results = results.append({
-                        'name': x.columns[0], 
-                        'model': f'ARMA({p}, {d}, {q})', 
-                        'mse': mean_squared_error(x, model.predict()),
-                        'mae': mean_absolute_error(x, model.predict()),
-                        'r2': r2_score(x, model.predict()),
-                        'aic': model.aic,
-                        'bic': model.bic,
-                        'hqic': model.hqic,
-                        'adf': adfuller(x)[1]
-                    }, ignore_index = True)
-                except:
-                    pass
+        print(f'Fitting: {len(max_order)} models')
+
+        out = {}
+        best_mse = np.inf
         
-        # return the best model 
-        bm = results.sort_values(by = 'mse').iloc[0]
-        p, d, q = map(int, re.findall(r'\d+', bm['model']))
-        mod = ARIMA(x, order = (p, d, q)).fit()
-        if result_df:
-            return {'results': results, 'model': mod}
+        # Early stopping parameters
+        stop_mse = 1e-7  # You can adjust this based on your requirement
+        
+        for p, d, q in tqdm(max_order, desc="Fitting ARIMA models"):
+            try:
+                model = ARIMA(x, order=(int(p), int(d), int(q))).fit()
+                prediction = model.predict()
+                mse = mean_squared_error(x, prediction)
+                mae = mean_absolute_error(x, prediction)
+                r2 = r2_score(x, prediction)
+                
+                results = pd.DataFrame({
+                    'name': x.name if hasattr(x, 'name') else 'series',
+                    'model': f'ARIMA({p}, {d}, {q})',
+                    'mse': mse,
+                    'mae': mae,
+                    'r2': r2,
+                    'aic': model.aic,
+                    'bic': model.bic,
+                    'hqic': model.hqic,
+                    'adf': adfuller(x)[1]
+                }, index=[f'({p}, {d}, {q})'])
+                
+                # Early stopping if we've found a good enough model
+                if mae < stop_mse:
+                    print(f"Stopping early: MSE {mae} below threshold {stop_mse}")
+                    best_mse = mse
+                    out['best'] = {'model': model, 'results': results}
+                    break
+
+                if mse < best_mse:
+                    best_mse = mse
+                    out['best'] = {'model': model, 'results': results}
+
+        
+                # out[f'{p},{d},{q}'] = {'model': model, 'results': results}
+                out[(p, d, q)] = {'model': model, 'results': results}
+
+            except Exception as e:
+                print(f"Failed to fit model ARIMA({p}, {d}, {q}): {str(e)}")
+
+        if 'best' in out:
+            if result_df:
+                summary = pd.concat([v['results'] for k, v in out.items() if k != 'best'])
+                out['summary'] = summary
+                out['models_fit'] = [tuple(x) for x in max_order]
+            return out
         else:
-            return mod
+            return {}
+
+
 
     def train_model(self, x: pd.DataFrame, model: Dict[str, Union[pd.DataFrame, ARIMA]], train_set: float = 0.9) -> pd.DataFrame:
         """
@@ -224,3 +238,19 @@ class arima_trend:
         ax.set_title(mod.data.ynames)
         ax.legend()
         plt.show()
+        
+        
+if __name__ == "__main__":
+    import pandas as pd 
+    
+    # Load Data
+    data = pd.read_csv('examples/data/ohlcv.csv', parse_dates=['timestamp'], index_col='timestamp')
+    
+    # Initialize ARIMA class
+    arima = arima_trend()
+    
+    y = data['target'].diff().dropna()
+    print(arima.adf_test(y))
+    
+    arima_model = arima.arima_model(y)
+    print(arima_model['best']['results'])

@@ -330,6 +330,9 @@ class analyze_correlation:
         Test H0: “causing does not Granger-cause the remaining variables of the system”  
         Test H1: “causing is Granger-causal for the remaining variables”.
 
+            - Small p-values (< 5%): Reject H0 and conclude that there is statistically significant Granger causality.
+            - Moderate p-values (5-20%): The results may be marginally significant or inconclusive, and further investigation is needed.
+            - Large p-values (> 20%): Fail to reject H0, suggesting no statistically significant Granger causality
         
         """
         if self.verbose:
