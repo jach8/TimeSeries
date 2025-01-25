@@ -159,7 +159,7 @@ class arima_trend:
         _, p_value, _, _, _, _ = adfuller(x)
         is_stationary = p_value < 0.05
         max_d = maxord['d'] if not is_stationary else 0
-        print(f"Data is {'not ' if not is_stationary else ''}stationary")
+        print(f"Data is {'not ' if not is_stationary else ''}stationary, Assessing max_d = {max_d}")
 
         # Generate model orders
         p_range = np.arange(1, maxord['p'] + 1)
@@ -224,24 +224,21 @@ class arima_trend:
         return xtrain, xtest
         
 
-    def train_model(self, x: pd.DataFrame, model: Dict[str, Union[pd.DataFrame, ARIMA]], train_set: float = 0.9) -> pd.DataFrame:
-        """
-        Fit the model by finding the optimal parameters on the training set 
-        Then evaluate the model on the test set and obtain the results information. 
+    # def train_model(self, x: pd.DataFrame, model: Dict[str, Union[pd.DataFrame, ARIMA]], train_set: float = 0.9) -> pd.DataFrame:
+    #     """
+    #     Fit the model by finding the optimal parameters on the training set 
+    #     Then evaluate the model on the test set and obtain the results information. 
         
-        Args:
-            x (pd.DataFrame): Time series data to model.
-            model (dict): Dictionary containing the results of the ARIMA or ARMA model.
-            train_set (float): Proportion of the data to use for training.
+    #     Args:
+    #         x (pd.DataFrame): Time series data to model.
+    #         model (dict): Dictionary containing the results of the ARIMA or ARMA model.
+    #         train_set (float): Proportion of the data to use for training.
         
-        Returns:
-            pd.DataFrame: DataFrame with accuracy measures of the model.
-        """
+    #     Returns:
+    #         pd.DataFrame: DataFrame with accuracy measures of the model.
+    #     """
         
-        pass
-
-    
-
+    #     pass
 
     def preds(self, mod: ARIMA, fh: int, ci: float = 0.10) -> pd.DataFrame:
         """
@@ -275,13 +272,22 @@ class arima_trend:
         """
         pred_out = self.preds(mod, fh, ci)
         fig, ax = plt.subplots(figsize=(10, 5))
-        # This line will raise an error as 'y' is not defined. Consider passing 'y' as an argument or 
-        # use the last part of the actual data from the model.
-        # ax.plot(y.tail(20), label='Actual')
+        # Plot the data before the forecast (2 * fh) 
+        og_data = mod.data.orig_endog.iloc[-(2 * fh):]
+        ax.plot(og_data, label='Original Data')
+        # Plot the Forecast
         ax.plot(pred_out['Mean Prediction'], label='Prediction')
-        ax.fill_between(pred_out.index, pred_out['Lower'], pred_out['Upper'], alpha=0.3, color='grey')
+        # Plot the Confidence Interval
+        ax.fill_between(
+            pred_out.index, 
+            pred_out['Lower'], 
+            pred_out['Upper'], 
+            alpha=0.3, 
+            color='grey'
+        )
         ax.set_title(mod.data.ynames)
         ax.legend()
+        fig.autofmt_xdate()
         plt.show()
         
         
