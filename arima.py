@@ -11,12 +11,15 @@ from statsmodels.tsa.arima.model import ARIMA
 from statsmodels.tsa.stattools import adfuller
 from typing import Dict, Optional, Tuple, Union
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
+from sklearn.model_selection import TimeSeriesSplit
+from sklearn.model_selection import train_test_split
+
 warnings.filterwarnings('ignore')
 
 class arima_trend:
     """
     Time Series Analysis (arima_trend) class for handling time series data operations, including conversion, 
-    stationarity testing, and ARIMA/ARMA modeling.
+    We will use this class to create a custom SARIMAX model for time series forecasting. 
     """
 
     def __init__(self):
@@ -32,6 +35,10 @@ class arima_trend:
         Returns:
             pd.Series: Time series object as a pandas Series, with a period index.
         """
+        # Check for duplicate labels 
+        if x.index.duplicated().any():
+            x = x.loc[~x.index.duplicated()]
+            
         freq = pd.infer_freq(x.index)
         x.index = pd.to_datetime(x.index)
         return x.asfreq(freq).bfill()
@@ -60,6 +67,54 @@ class arima_trend:
         return pd.DataFrame(dfoutput, columns = [col_name])
     
     
+    
+    def results_dataframe(self, x:pd.DataFrame, model: ARIMA) -> pd.DataFrame:
+        """
+        Returns the following Accuarcy Measures: 
+            - Mean Absolute Error (MAE)
+            - Mean Squared Prediction Error (MSPE)
+            - Mean Absolute Percentage Error (MAPE)
+            - Prediction Measure (PM)
+            - R2 Score
+            - AIC
+            - BIC
+            - HQIC
+            - ADF p-value
+        """
+        # Get the model orders from the ARIMA object: 
+        mo = model.model_orders # A dictionary 
+        p = mo['ar'] # Autoregressive Factor
+        d = mo['trend'] # Differencing Factor
+        q = mo['ma'] # Moving Average Factor
+        
+        prediction = model.predict()
+        mse = mean_squared_error(x, prediction)
+        mae = mean_absolute_error(x, prediction)
+        r2 = r2_score(x, prediction)
+        resid = x - prediction
+        mape = np.mean(np.abs((resid) / x))
+        mspe = np.mean(resid)**2
+        pm = np.sum((resid)**2) / np.sum((x - np.mean(x))**2)
+        
+
+        results = pd.DataFrame({
+            'name': x.name if hasattr(x, 'name') else 'series',
+            'model': f'ARIMA({p}, {d}, {q})',
+            'mse': mse,
+            'mae': mae,
+            'mape': mape,
+            'mspe': mspe,
+            'pm': pm,
+            'r2': r2,
+            'aic': model.aic,
+            'bic': model.bic,
+            'hqic': model.hqic,
+            'adf': adfuller(x)[1]
+        }, index=[f'({p}, {d}, {q})'])
+        
+        return results
+    
+    
 
     def arima_model(self, x: pd.DataFrame, maxord: dict = dict(p=5, d=0, q=5), result_df: bool = True) -> dict:
         """
@@ -73,6 +128,18 @@ class arima_trend:
                 - The model will difference the data d times to make it statistically stationary
                 - That means by passing in a difference series x, there is no need to difference the data
             q (moving average order): The number of lagged errors used in the MA component
+            
+        
+        Returns the following Accuarcy Measures: 
+            - Mean Absolute Error (MAE)
+            - Mean Squared Prediction Error (MSPE)
+            - Mean Absolute Percentage Error (MAPE)
+            - Prediction Measure (PM)
+            - R2 Score
+            - AIC
+            - BIC
+            - HQIC
+            - ADF p-value
         
         Args:
             x (pd.DataFrame): Time series data to model.
@@ -111,26 +178,12 @@ class arima_trend:
         for p, d, q in tqdm(max_order, desc="Fitting ARIMA models"):
             try:
                 model = ARIMA(x, order=(int(p), int(d), int(q))).fit()
-                prediction = model.predict()
-                mse = mean_squared_error(x, prediction)
-                mae = mean_absolute_error(x, prediction)
-                r2 = r2_score(x, prediction)
-                
-                results = pd.DataFrame({
-                    'name': x.name if hasattr(x, 'name') else 'series',
-                    'model': f'ARIMA({p}, {d}, {q})',
-                    'mse': mse,
-                    'mae': mae,
-                    'r2': r2,
-                    'aic': model.aic,
-                    'bic': model.bic,
-                    'hqic': model.hqic,
-                    'adf': adfuller(x)[1]
-                }, index=[f'({p}, {d}, {q})'])
-                
+                results = self.results_dataframe(x, model)
+                mse = results['mse'].values[0]
+            
                 # Early stopping if we've found a good enough model
-                if mae < stop_mse:
-                    print(f"Stopping early: MSE {mae} below threshold {stop_mse}")
+                if mse < stop_mse:
+                    print(f"Stopping early: MSE {mse} below threshold {stop_mse}")
                     best_mse = mse
                     out['best'] = {'model': model, 'results': results}
                     break
@@ -138,9 +191,7 @@ class arima_trend:
                 if mse < best_mse:
                     best_mse = mse
                     out['best'] = {'model': model, 'results': results}
-
-        
-                # out[f'{p},{d},{q}'] = {'model': model, 'results': results}
+    
                 out[(p, d, q)] = {'model': model, 'results': results}
 
             except Exception as e:
@@ -154,12 +205,29 @@ class arima_trend:
             return out
         else:
             return {}
-
-
+        
+    
+    def _split_training_testing_data(self, x: pd.DataFrame, train_set: float = 0.9) -> Tuple[pd.DataFrame, pd.DataFrame]:
+        """
+        Split the data into training and testing sets. 
+        
+        Args:
+            x (pd.DataFrame): Time series data to model.
+            train_set (float): Proportion of the data to use for training.
+        
+        Returns:
+            X_train (pd.DataFrame): DataFrame containing the training data.
+            X_test (pd.DataFrame): DataFrame containing the testing data.
+        
+        """
+        xtrain, xtest = train_test_split(x, train_size=train_set, shuffle=False)
+        return xtrain, xtest
+        
 
     def train_model(self, x: pd.DataFrame, model: Dict[str, Union[pd.DataFrame, ARIMA]], train_set: float = 0.9) -> pd.DataFrame:
         """
-        Train the ARIMA or ARMA model on the data and obtain accuracy measures.
+        Fit the model by finding the optimal parameters on the training set 
+        Then evaluate the model on the test set and obtain the results information. 
         
         Args:
             x (pd.DataFrame): Time series data to model.
@@ -169,34 +237,11 @@ class arima_trend:
         Returns:
             pd.DataFrame: DataFrame with accuracy measures of the model.
         """
-        x = self.get_series(x)
+        
+        pass
 
-        train_ind = int(len(x) * train_set)
-        test_ind = int(len(x) * (1 - train_set))
+    
 
-        train = x[:train_ind]
-        test = x[train_ind:]
-
-        p, q, d = model['model'].order
-        m = str(model['model'].__class__).split('.')[-1].split("'")[0]
-
-        model_fit = ARIMA(train, order = (p, d, q)).fit()
-
-        pred = model_fit.get_forecast(len(test)).predicted_mean
-        tm = pd.concat([test, pred], axis = 1)
-        tm.columns = ['actual', 'predicted']
-        tm['resid'] = tm['predicted'] - tm['actual']
-
-        out = pd.DataFrame(columns = ['name', 'model', 'mae', 'mspe', 'mape', 'pm'])
-        out = out.append({
-            'name': x.columns[0],
-            'model': f'{m}({p}, {d}, {q})',
-            'mae': np.mean(np.abs(tm.resid)),
-            'mspe': np.mean(tm.resid)**2,
-            'mape': np.mean(np.abs((tm.resid) / tm.actual)),
-            'pm': np.sum((tm.resid)**2) / np.sum((tm.actual - np.mean(tm.actual))**2)
-        }, ignore_index = True)
-        return out
 
     def preds(self, mod: ARIMA, fh: int, ci: float = 0.10) -> pd.DataFrame:
         """
@@ -244,12 +289,13 @@ if __name__ == "__main__":
     import pandas as pd 
     
     # Load Data
-    data = pd.read_csv('examples/data/ohlcv.csv', parse_dates=['timestamp'], index_col='timestamp')
+    # data = pd.read_csv('examples/data/ohlcv.csv', parse_dates=['timestamp'], index_col='timestamp')
+    data = pd.read_csv("examples/data/tsne_data.csv", parse_dates=['date'], index_col='date')
     
     # Initialize ARIMA class
     arima = arima_trend()
     
-    y = data['target'].diff().dropna()
+    y = data['Close'].diff().dropna()
     print(arima.adf_test(y))
     
     arima_model = arima.arima_model(y)

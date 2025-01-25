@@ -444,7 +444,7 @@ class analyze_correlation:
         
         for caused, target in checks:
             t = grangercausalitytests(self.df_scaled[[target, caused]], maxlag = 4)
-            if t[1][0]['ssr_ftest'][1] > significance_level:
+            if t[1][0]['ssr_ftest'][1] < significance_level:
                 contemporaneous_causality.append((target, caused))
                 if self.verbose:
                     cl = int(100 - (100*significance_level))
@@ -523,13 +523,25 @@ if __name__ == "__main__":
     
     
     ########################################################### 
-    import statsmodels.api as sm
-    macrodata = sm.datasets.macrodata.load_pandas().data
-    macrodata.index = pd.period_range('1959Q1', '2009Q3', freq='Q')
-    macrodata.index = macrodata.index.to_timestamp()
-    macrodata = macrodata.drop(columns = ['year', 'quarter'])
-    macrodata = macrodata.diff().dropna()
-    x = macrodata.drop(columns = 'realgdp')
-    y = macrodata['realgdp']
-    ac = analyze_correlation(x, y, verbose=True)
+    # import statsmodels.api as sm
+    # macrodata = sm.datasets.macrodata.load_pandas().data
+    # macrodata.index = pd.period_range('1959Q1', '2009Q3', freq='Q')
+    # macrodata.index = macrodata.index.to_timestamp()
+    # macrodata = macrodata.drop(columns = ['year', 'quarter'])
+    # macrodata = macrodata.diff().dropna()
+    # x = macrodata.drop(columns = 'realgdp')
+    # y = macrodata['realgdp']
+    # ac = analyze_correlation(x, y, verbose=True)
+    # results = ac.analyze()
+    
+    
+    ########################################################### 
+    data = pd.read_csv('examples/data/stock_returns.csv', parse_dates=['Date'], index_col='Date').iloc[1:]
+    data = data["2000-01-01":].dropna(axis = 1)
+    random_20_stocks = np.random.choice(data.columns, 60, replace = False)
+    random_y = np.random.choice(random_20_stocks, 1, replace = False)[0]
+    x = data.drop(columns = random_y).iloc[:-1]
+    y = data[random_y].iloc[:-1]
+    ac = analyze_correlation(x, y, verbose=True, decompose=False)
     results = ac.analyze()
+    # print(results)
