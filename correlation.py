@@ -84,7 +84,6 @@ class AnalyzeCorrelation:
         try:
             stationary_df, report, tests = self.stationary_tester.check_stationarity(self.df)
             self.df = stationary_df
-            print(self.df)
             if self.verbose:
                 print("Stationarity transformation complete")
                 print(pd.DataFrame(report).T)
@@ -157,23 +156,23 @@ if __name__ == "__main__":
     }
 
     # # Updated test code
-    # data = pd.read_csv('examples/data/stock_returns.csv', parse_dates=['Date'], index_col='Date').dropna(axis=1)
-    # data = data.dropna(axis = 1)
-    # target = np.random.choice(data.columns, 1)[0]
-    # target = "SPY"
-    # features = data.drop(columns=target).iloc[:, :5]
-    # x = features.copy()
-    # y = data[target].copy()
+    data = pd.read_csv('examples/data/stock_returns.csv', parse_dates=['Date'], index_col='Date').dropna(axis=1)
+    data = data.dropna(axis = 1)
+    target = np.random.choice(data.columns, 1)[0]
+    target = "SPY"
+    features = data.drop(columns=target).iloc[:, :]
+    x = features.copy()
+    y = data[target].copy()
     
-    # print('\n\n', y.name, '\n\n')
+    print('\n\n', y.name, '\n\n')
     
-    data = pd.read_csv("examples/data/hdd.csv", parse_dates=['date'], index_col='date')
-    data = data.drop_duplicates().dropna()
-    # Shift the target variable, forward by 1
-    data['target'] = data['target'].shift(-1)
-    data = data.dropna()
-    x = data.drop(columns='target')
-    y = data['target']
+    # data = pd.read_csv("examples/data/hdd.csv", parse_dates=['date'], index_col='date')
+    # data = data.drop_duplicates().dropna()
+    # # Shift the target variable, forward by 1
+    # data['target'] = data['target'].shift(-1)
+    # data = data.dropna()
+    # x = data.drop(columns='target')
+    # y = data['target']
     
     with AnalyzeCorrelation(
         x=x, y = y,

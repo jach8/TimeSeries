@@ -251,18 +251,18 @@ class StationaryTests:
             col_results = []
 
             for _ in range(self.test_config['adf']['max_diff'] + 1):
-                test_results = self._run_test_battery(current_series)
+                test_results = self._run_test_battery(current_series.dropna())
                 col_results.append(test_results)
                 
                 if self._is_stationary(test_results):
                     break
                     
                 # Apply differencing
-                current_series = current_series.diff().dropna()
+                current_series = current_series.diff()
                 diff_count += 1
 
             # Store results with a new column name
-            stationary_df[col+f'{diff_count}'] = current_series
+            stationary_df[col+f'_{diff_count}'] = current_series
             # If non-stationary drop column 
             if self._is_stationary(test_results):
                 stationary_df = stationary_df.drop(columns = [col])
@@ -275,7 +275,8 @@ class StationaryTests:
             if self.verbose:
                 print(f"{col}: {diff_count} differences applied")
                 print("Last test results:", {k:v for k,v in test_results.items() if k not in ['seasonal_decomp', 'canova_hansen']})
-
+        
+        stationary_df = stationary_df.dropna()
         return stationary_df, report, full_results
 
 
