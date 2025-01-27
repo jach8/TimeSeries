@@ -1,3 +1,7 @@
+###### Source:
+##### https://www.statsmodels.org/dev/_modules/statsmodels/tsa/stattools/_stattools.html#grangercausalitytests
+####
+
 import numpy as np 
 from statsmodels.tools.tools import Bunch, add_constant
 from statsmodels.tools.validation import (
@@ -212,8 +216,8 @@ def grangercausalitytests(x, maxlag, addconst=True, verbose=None):
         #     print(
         #         "ssr based chi2 test:   chi2=%-8.4f, p=%-8.4f, "
         #         "df=%d" % (fgc2, stats.chi2.sf(fgc2, mxlg), mxlg)
-        #     )
-        # result["ssr_chi2test"] = (fgc2, stats.chi2.sf(fgc2, mxlg), mxlg)
+        # )
+        result["ssr_chi2test"] = (fgc2, stats.chi2.sf(fgc2, mxlg), mxlg)
 
         # likelihood ratio test pvalue:
         lr = -2 * (res2down.llf - res2djoint.llf)

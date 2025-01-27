@@ -114,8 +114,6 @@ class arima_trend:
         
         return results
     
-    
-
     def arima_model(self, x: pd.DataFrame, maxord: dict = dict(p=5, d=0, q=5), result_df: bool = True) -> dict:
         """
 
@@ -180,14 +178,8 @@ class arima_trend:
                 model = ARIMA(x, order=(int(p), int(d), int(q))).fit()
                 results = self.results_dataframe(x, model)
                 mse = results['mse'].values[0]
-            
-                # Early stopping if we've found a good enough model
-                if mse < stop_mse:
-                    print(f"Stopping early: MSE {mse} below threshold {stop_mse}")
-                    best_mse = mse
-                    out['best'] = {'model': model, 'results': results}
-                    break
-
+                
+                # Save the best model 
                 if mse < best_mse:
                     best_mse = mse
                     out['best'] = {'model': model, 'results': results}
@@ -223,23 +215,7 @@ class arima_trend:
         xtrain, xtest = train_test_split(x, train_size=train_set, shuffle=False)
         return xtrain, xtest
         
-
-    # def train_model(self, x: pd.DataFrame, model: Dict[str, Union[pd.DataFrame, ARIMA]], train_set: float = 0.9) -> pd.DataFrame:
-    #     """
-    #     Fit the model by finding the optimal parameters on the training set 
-    #     Then evaluate the model on the test set and obtain the results information. 
         
-    #     Args:
-    #         x (pd.DataFrame): Time series data to model.
-    #         model (dict): Dictionary containing the results of the ARIMA or ARMA model.
-    #         train_set (float): Proportion of the data to use for training.
-        
-    #     Returns:
-    #         pd.DataFrame: DataFrame with accuracy measures of the model.
-    #     """
-        
-    #     pass
-
     def preds(self, mod: ARIMA, fh: int, ci: float = 0.10) -> pd.DataFrame:
         """
         Obtain predictions from the ARIMA or ARMA model.
@@ -297,11 +273,11 @@ if __name__ == "__main__":
     # Load Data
     # data = pd.read_csv('examples/data/ohlcv.csv', parse_dates=['timestamp'], index_col='timestamp')
     data = pd.read_csv("examples/data/tsne_data.csv", parse_dates=['date'], index_col='date')
+    y = data['Close'].diff().dropna()
     
     # Initialize ARIMA class
     arima = arima_trend()
     
-    y = data['Close'].diff().dropna()
     print(arima.adf_test(y))
     
     arima_model = arima.arima_model(y)
