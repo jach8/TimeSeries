@@ -4,61 +4,34 @@ This project contains Python scripts for analyzing and modeling time series data
 
 ## Files
 
-- `timeseries.py`: Contains the `TimeSeriesAnalyzer` class for performing time series analysis, including stationarity tests, VAR modeling, and Granger causality tests.
-- `arima.py`: Contains the `arima_trend` class for handling time series data operations, including conversion, stationarity testing, and ARIMA/ARMA modeling.
+- `main.py`: Main entry point for running the analysis.
 - `correlation.py`: Contains the `AnalyzeCorrelation` class for performing correlation analysis, including stationarity tests, PCA decomposition, VAR modeling, and Granger causality tests.
 - `stationary_checks.py`: Contains the `StationaryTests` class for performing various stationarity tests.
 - `causality_logic.py`: Contains the `CausalityAnalyzer` class for performing causality tests.
+- `data.py`: Contains functions for loading and generating test data.
 
 ## Usage
 
-### TimeSeriesAnalyzer
+### Analyze
 
-The `TimeSeriesAnalyzer` class in `timeseries.py` is used for analyzing time series data. Below is an example of how to use it:
+The `Analyze` class in `main.py` is used for analyzing the correlation between two time series. Below is an example of how to use it:
 
 ```python
 import pandas as pd
-from timeseries import TimeSeriesAnalyzer
+from src.data import random_test_data
+from main import Analyze
 
 # Load your data into x (features) and y (target)
-x = pd.DataFrame(...)  # Replace with your features DataFrame
-y = pd.Series(...)  # Replace with your target Series
+x, y = random_test_data(n=500, return_xy=True)
 
-# Initialize the analyzer
-analyzer = TimeSeriesAnalyzer(x, y, verbose=True)
+# Initialize the analysis
+analyzer = Analyze(verbose=True)
 
 # Run the analysis
-results = analyzer.analyze()
+results = analyzer.results(x, y)
 
 # Print the results
 print(results)
-```
-
-### arima_trend
-
-The `arima_trend` class in `arima.py` is used for ARIMA/ARMA modeling of time series data. Below is an example of how to use it:
-
-```python
-import pandas as pd
-from arima import arima_trend
-
-# Load your data into a DataFrame
-data = pd.DataFrame(...)  # Replace with your DataFrame
-
-# Initialize the arima_trend class
-arima = arima_trend()
-
-# Perform ARIMA modeling
-arima_results = arima.arima_model(data)
-
-# Print the results
-print(arima_results['results'])
-
-# Train the model
-train_results = arima.train_model(data, arima_results)
-
-# Print the training results
-print(train_results)
 ```
 
 ### AnalyzeCorrelation
@@ -67,7 +40,7 @@ The `AnalyzeCorrelation` class in `correlation.py` is used for correlation analy
 
 ```python
 import pandas as pd
-from correlation import AnalyzeCorrelation
+from src.correlation import AnalyzeCorrelation
 
 # Load your data into x (features) and y (target)
 x = pd.DataFrame(...)  # Replace with your features DataFrame
@@ -107,7 +80,7 @@ The `StationaryTests` class in `stationary_checks.py` is used for performing var
 
 ```python
 import pandas as pd
-from stationary_checks import StationaryTests
+from src.stationary_checks import StationaryTests
 
 # Load your data into a DataFrame
 data = pd.DataFrame(...)  # Replace with your DataFrame
@@ -128,7 +101,7 @@ The `CausalityAnalyzer` class in `causality_logic.py` is used for performing cau
 
 ```python
 import pandas as pd
-from causality_logic import CausalityAnalyzer
+from src.causality_logic import CausalityAnalyzer
 
 # Load your data into a DataFrame
 data = pd.DataFrame(...)  # Replace with your DataFrame
