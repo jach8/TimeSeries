@@ -6,8 +6,8 @@ from sklearn.preprocessing import StandardScaler
 from itertools import combinations
 from sklearn.decomposition import PCA
 from io import StringIO
-from stationary_checks import StationaryTests  
-from causality_logic import CausalityAnalyzer
+from src.stationary_checks import StationaryTests  
+from src.causality_logic import CausalityAnalyzer
 
 
 class AnalyzeCorrelation:
@@ -23,6 +23,7 @@ class AnalyzeCorrelation:
         self.verbose = verbose
         self.cause = y.name
         self.decompose = decompose
+        self.stationarity_report = None
         
         # Initialize modules
         self.stationary_tester = StationaryTests(
@@ -31,7 +32,8 @@ class AnalyzeCorrelation:
         )
         
         self.causality_analyzer = CausalityAnalyzer(
-            **(causality_config or {})
+            causality_config=causality_config or {},
+            verbose=verbose
         )
         self._setup_data(x, y)
 
@@ -83,6 +85,7 @@ class AnalyzeCorrelation:
         """Full stationarity pipeline"""
         try:
             stationary_df, report, tests = self.stationary_tester.check_stationarity(self.df)
+            self.stationary_report = report
             self.df = stationary_df
             if self.verbose:
                 print("Stationarity transformation complete")
@@ -103,7 +106,7 @@ class AnalyzeCorrelation:
         causality = self.causality_analyzer.causality_tests(data = self.df, target = self.cause)
         
         return {
-            'stationarity_report': self.stationary_tester._test_history,
+            'stationarity_report': self.stationary_report,
             'var_model': self.var_model,
             'causality': causality,
             'new_data': self.df

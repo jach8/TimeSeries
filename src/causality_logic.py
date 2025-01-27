@@ -3,18 +3,23 @@ import numpy as np
 import warnings
 from io import StringIO
 from statsmodels.tsa.vector_ar.var_model import VAR
-from granger import grangercausalitytests
+from src.granger import grangercausalitytests
 from itertools import combinations
-from stationary_checks import StationaryTests  
+from src.stationary_checks import StationaryTests  
 from tqdm import tqdm 
 
 class CausalityAnalyzer:
     """
     Handles different types of causality tests with consistent interface
     """
-    def __init__(self, significance_level=0.05, max_lag=4, verbose = False):
-        self.significance_level = significance_level
-        self.max_lag = max_lag
+    def __init__(self, causality_config = None, verbose = False):
+        self.default_config = {
+            'significance_level': 0.05,
+            'max_lag': 3
+        }
+        self.config = causality_config or self.default_config
+        self.significance_level = self.config.get('significance_level', 0.05)
+        self.max_lag = self.config.get('max_lag', 3)
         self.verbose = verbose
         
     
@@ -87,7 +92,8 @@ class CausalityAnalyzer:
     def granger_test(self, data, target):
         """ run granger causality test on all columns in the data"""
         results = {}
-        pbar = tqdm(self._get_column_pairs(data, target), desc="Granger Causality")
+        cp = self._get_column_pairs(data, target)
+        pbar = tqdm(cp, desc="Granger Causality")
         for x1, x2 in pbar:
             pbar.set_description(f"Granger Causality: {x1} -> {x2}")
             d = self.__granger_causality(data[x1], data[x2])
