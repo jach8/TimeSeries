@@ -71,15 +71,23 @@ class AnalyzeCorrelation:
         - df: pd.DataFrame: The input dataframe
         - threshold: float: The VIF threshold to drop features
         """
+        df['Intercept'] = 1
         vif_df = pd.DataFrame()
         vif_df["VIF"] = [vif(df.values, i) for i in range(df.shape[1])]
-        vif_df["features"] = df.columns
+        vif_df["features"] = df.columns.tolist()
+        
         high_vif = vif_df[vif_df["VIF"] > threshold]
+        dropcols = high_vif['features'].tolist()
+        if 'Intercept' not in dropcols:
+            dropcols.append('Intercept')
+        self.vif_report = vif_df
+        
         if high_vif.shape[0] > 0:
+            out = df.drop(columns=dropcols)
             if self.verbose:
-                print(f"High VIF features: {high_vif['features'].tolist()}")
-            return df.drop(columns=high_vif['features'])
-        return df
+                print(f"High VIF features: {dropcols}")
+            return out
+        return df.drop(columns=['Intercept'])
 
 
     def _process_features(self, x, index):
@@ -93,7 +101,7 @@ class AnalyzeCorrelation:
         )
 
 
-    def _pca_decomposition(self, x, n_components=3):
+    def _pca_decomposition(self, x, n_components=9):
         """Dimensionality reduction"""
         centered_x = x - x.mean()
         scaled_x = self.scaler.fit_transform(centered_x)
@@ -114,7 +122,7 @@ class AnalyzeCorrelation:
 
             if self.verbose:
                 print("Stationarity transformation complete")
-                print(pd.DataFrame(report).T)
+                print(pd.DataFrame(report))
             return True
         except Exception as e:
             print(self.df)
@@ -128,7 +136,7 @@ class AnalyzeCorrelation:
             raise ValueError("Data could not be made stationary")
             
         self.var_model = self._fit_var_model()
-        causality = self.causality_analyzer.causality_tests(data = self.df, target = self.cause)
+        causality = self.causality_analyzer.causality_tests(data = self.df, target = self.cause, model = self.var_model)
         
         return {
             'stationarity_report': self.stationary_report,

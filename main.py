@@ -73,7 +73,7 @@ if __name__ == "__main__":
     # Example usage
     import pandas as pd
     from src.data import *
-    x, y = test_data3(return_xy=True, path_to_src='src/')
+    x, y = test_data1(return_xy=True, path_to_src='src/')
     x = x.dropna(axis = 1)
     print(x.shape, y.shape)
     
@@ -81,7 +81,7 @@ if __name__ == "__main__":
     # print(x.head().iloc[:,:])
     # Initialize the analysis
     a = Analyze(verbose=False)
-    d = a.results(x, y, decompose=False)
+    d = a.results(x, y, decompose=True)
     
     print("\nNew Data with Stationarity Transformation:")
     print(d['new_data'])
@@ -91,3 +91,6 @@ if __name__ == "__main__":
     
     print("\nKey Findings:")
     print(f"Significant Granger causes: {d['causality']}")
+
+    print("\nVAR Model Summary:")
+    # print(d['var_model'].summary())

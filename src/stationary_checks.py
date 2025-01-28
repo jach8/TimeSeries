@@ -430,7 +430,6 @@ class StationaryTests:
                 print("Last test results:", {k:v for k,v in test_results.items() if k not in ['seasonal_decomp', 'canova_hansen']})
         
         max_diff = max([v['diffs_applied'] for v in report.values()])
-        
         stationary_df = stationary_df.iloc[max_diff:]
         return stationary_df, report, full_results
 

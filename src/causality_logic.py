@@ -92,8 +92,6 @@ class CausalityAnalyzer:
                 out.append([x2,x1])
                 
         return out
-        
-        
     def granger_test(self, data, target):
         """ run granger causality test on all columns in the data"""
         results = {}
@@ -106,14 +104,47 @@ class CausalityAnalyzer:
         pbar.close()
         return results
     
-    def causality_tests(self, data, target):
+    def instantaneous_causality(self, fit, data, target):
+        """
+        Perform Instantaneous causality test (A form of Granger Causality test) from the Var Model Fit.
+        Instantaneous causality reflects a non-zero correlation between the variables in the system. 
+        
+        Parameters:
+            - fit: The VAR model fit
+            - data: The data to analyze
+            - target: The target variable
+        
+        Returns:
+            - list: A list of tuples representing instantaneous causality
+
+        """
+        instaneous_cause = []
+        features = [x for x in data.columns if x != target]
+        for i in features:
+            try:
+                t = fit.test_inst_causality(causing=i).summary()
+            except Exception as e:
+                raise ValueError(f"{i} Error in Instaneous Causality test: {str(e)}")
+                
+            if t[1][2].data < self.significance_level:
+                if t[1][2].data == 0:
+                    # Raise warnings for perfect causality
+                    warnings.warn(f"{i} Perfect Instaneous Causality detected for {target}.")
+                instaneous_cause.append((target, i))
+                if self.verbose:
+                    confi = int(100 - (100*self.significance_level))
+                    print(f'{i} has an instantaneous causal effect on {target} @ {confi}% confidence level, p-value: {t[1][2].data}')
+                    
+        return instaneous_cause
+        
+    
+    def causality_tests(self, data, target, model = None):
         """Unified causality test interface"""
         results = {
             'granger': [],
             'instantaneous': [],
             'contemporaneous': []
         }
-        print(self._get_column_pairs(data, target))
         granger_tests = self.granger_test(data, target)
         for k, v in granger_tests.items():
             # Check p-values:
@@ -127,8 +158,11 @@ class CausalityAnalyzer:
             if self.verbose and not new_v.empty:
                 print(f'{k[1]} Does Granger Cause {k[0]} @ {self.significance_level}% confidence level')
                 print(new_v)
+        print('\n')
 
-    
+        if model:
+            # Instantaneous causality test
+            results['instantaneous'] = self.instantaneous_causality(model, data, target)
         return results
 
 
