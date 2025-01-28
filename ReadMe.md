@@ -1,6 +1,11 @@
 # Time Series Analysis Toolkit
 
-This package provides a comprehensive suite of tools for time series analysis, focusing on stationarity checks, causality analysis, and correlation study. It's designed to assist data scientists and analysts in understanding complex time series data through integrated and modular analysis techniques.
+This package provides a comprehensive suite of tools for time series analysis, focusing on stationarity checks, causality analysis, and correlation study. It's designed to assist data scientists and analysts in understanding complex temporal relationships data through integrated and modular analysis techniques.
+
+## Introduction
+
+This toolkit is designed for anyone working with time series data, from forecasting stock prices to analyzing climate change patterns. It simplifies complex statistical tests into an easy-to-use Python framework.
+
 
 ## Overview
 
@@ -10,7 +15,7 @@ This package provides a comprehensive suite of tools for time series analysis, f
 - **Analyze**: A high-level interface class that simplifies the usage of the above tools with default configurations.
 
 
-### Analyze
+## Analyze
 
 The `Analyze` class in `main.py` is used for analyzing the correlation between two time series. Below is an example of how to use it:
 
@@ -32,7 +37,7 @@ results = analyzer.results(x, y)
 print(results)
 ```
 
-### AnalyzeCorrelation
+## AnalyzeCorrelation
 
 The `AnalyzeCorrelation` class in `correlation.py` is used for correlation analysis of time series data. Below is an example of how to use it:
 
@@ -50,7 +55,6 @@ stationarity_cfg = {
     'kpss': {'significance': 0.05},
     'pp': {'significance': 0.05},
     'structural_break': True,
-    'seasonal': {'period': 12}, 
     'gls': False,
     'nonlinear': True
 }
@@ -76,15 +80,16 @@ results = analyzer.analyze_relationships()
 print(results)
 ```
 
-### StationaryTests
+## StationaryTests
 
 The `StationaryTests` class in `stationary_checks.py` is used for performing various stationarity tests. Below is an example of how to use it:
 - For the configuration you can change the parameters as needed. 
   1. `adf`: Unit Root Test for Stationarity
   2. `kpss`: Test for Trend Stationarity
   3. `pp`: Phillips-Perron Test for Unit root 
-  4. `structural_break`: Test stationarity with a Structural Break (shock)
-  5. `kss`: Test for Non-Linear Stationarity 
+  4. `structural_break`: Zivot Andrews Test stationarity with a Structural Break (shock)
+  5. `gls`: DFGLS test for unit Root.  
+  6. `nonlinear`: KSS Test for Non-Linear Stationarity
 
 ```python
 import pandas as pd
@@ -115,7 +120,7 @@ stationary_df, report, results = st.check_stationarity(data)
 print(report)
 ```
 
-### CausalityAnalyzer
+## CausalityAnalyzer
 
 The `CausalityAnalyzer` class in `causality_logic.py` is used for performing causality tests. Below is an example of how to use it:
 
@@ -162,6 +167,12 @@ To install the required dependencies, run:
 ```bash
 pip install pandas numpy statsmodels scikit-learn arch matplotlib pmdarima tqdm
 ```
+
+## Contributing
+We welcome contributions! Please create a pull request to get involved.
+
+## Support
+For questions or support, please open an issue on our GitHub Issues page 
 
 ## License
 
