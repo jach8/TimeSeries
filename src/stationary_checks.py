@@ -144,6 +144,9 @@ class StationaryTests:
         # Structural break test
         if self.test_config.get('structural_break'):
             results['zivot_andrews'] = self.zivot_andrews_test(series)
+        
+        if self.test_config.get('pp'):
+            results['pp'] = self.phillips_perron_test(series)
             
         # Advanced tests
         if self.test_config.get('gls'):
@@ -285,13 +288,24 @@ class StationaryTests:
                     'alpha': 0.05
                 }
         """
-        result = ZivotAndrews(series)
-        return {
-            'test': 'Structural Break',
-            'stationary': float(result.pvalue) < alpha,
-            'p': result.pvalue,
-            'alpha': alpha
-        }
+        # If the numbers are too large, the test will fail
+        try:
+            result = ZivotAndrews(series)
+            out = {
+                'test': 'Structural Break',
+                'stationary': float(result.pvalue) < alpha,
+                'p': result.pvalue,
+                'alpha': alpha
+            }
+        except:
+            out = {
+                'test': 'Structural Break',
+                'stationary': False,
+                'p': 1,
+                'alpha': alpha
+            }
+        return out
+
 
     def dfgls_test(self, series, alpha=0.05):
         """

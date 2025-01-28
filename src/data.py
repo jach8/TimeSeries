@@ -68,5 +68,3 @@ def test_data3(start_date = '2020-01-01', return_xy = False, target = "SPY", pat
     else:
         return data
 
-
-test_data3(return_xy=True, path_to_src='src/')

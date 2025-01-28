@@ -8,7 +8,6 @@ from tqdm import tqdm
 
 # Import granger causality tests
 from src.granger import grangercausalitytests
-from src.stationary_checks import StationaryTests  
 
 class CausalityAnalyzer:
     """
@@ -139,11 +138,30 @@ class CausalityAnalyzer:
         
     
     def causality_tests(self, data, target, model = None):
-        """Unified causality test interface"""
+        """
+        Unified causality test interface
+        Runs the granger causality test and the instantaneous causality test on the data
+        Contemporary causality is not implemented yet.
+        
+        Arguments:
+            - data: pd.DataFrame: The data to analyze
+            - target: str: The target variable
+            - model: The VAR model fit
+        
+        Returns:
+            - dict: A dictionary of causality test results
+            Example:
+            {
+                'granger': [(('x1', 'x2'), [1, 2, 3])],
+                'instantaneous': [('x1', 'x2')],
+                'contemporaneous': [('x1', 'x2')]
+            }
+        
+        """
         results = {
             'granger': [],
             'instantaneous': [],
-            'contemporaneous': []
+            # 'contemporaneous': []
         }
         granger_tests = self.granger_test(data, target)
         for k, v in granger_tests.items():
