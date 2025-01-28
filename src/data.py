@@ -1,13 +1,23 @@
 import numpy as np 
 import pandas as pd 
+import os
+
+
+
 ##########################################################
 from pickle import dump, load
 
-def test_data1():
-    data = load(open('examples/data/data.pkl', 'rb'))
+def test_data1(path_to_src = None, return_xy = False):
+    if '/' != path_to_src[-1]:
+        path_to_src = path_to_src + '/'
+        
+    data = load(open(f'{path_to_src}test_data/data.pkl', 'rb'))
     x = data['xvar']; y = data['yvar']
     y.name = 'target'
-    return x, y
+    if return_xy:
+        return x, y
+    else:
+        return pd.concat([x, y], axis=1)
 
 ##########################################################
 
@@ -45,10 +55,18 @@ def test_data2(return_xy = False):
 
 
 ########################################################### 
-def stock_returns_data(start_date = '2020-01-01', return_xy = False, target = "SPY"):
-    data = pd.read_csv('examples/data/stock_returns.csv', parse_dates=['Date'], index_col='Date')
-    data = data[start_date:].dropna(axis=1)
+def test_data3(start_date = '2020-01-01', return_xy = False, target = "SPY", path_to_src = None):
+    if path_to_src is not None and '/' != path_to_src[-1]:
+        path_to_src = path_to_src + '/'
+    data = pd.read_csv(f'{path_to_src}test_data/stock_returns.csv', parse_dates=['Date'], index_col='Date')
+    # Print columns and their NA counts
+    drop_cols = data.isna().sum().sort_values(ascending=False) > 5000
+    data = data.drop(columns = drop_cols[drop_cols].index)
+    data = data[start_date:]
     if return_xy:
         return data.drop(columns = target), data[target]
     else:
         return data
+
+
+test_data3(return_xy=True, path_to_src='src/')

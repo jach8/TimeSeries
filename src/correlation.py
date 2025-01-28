@@ -2,12 +2,13 @@ import pandas as pd
 import numpy as np
 import warnings
 from statsmodels.tsa.vector_ar.var_model import VAR
-from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import StandardScaler, RobustScaler
 from itertools import combinations
 from sklearn.decomposition import PCA
 from io import StringIO
 from src.stationary_checks import StationaryTests  
 from src.causality_logic import CausalityAnalyzer
+from statsmodels.stats.outliers_influence import variance_inflation_factor as vif
 
 
 class AnalyzeCorrelation:
@@ -36,16 +37,18 @@ class AnalyzeCorrelation:
             verbose=verbose
         )
         self._setup_data(x, y)
-
+        
     def _setup_data(self, x, y):
         """Data preparation pipeline"""
         # Merge and clean data
         df = x.merge(y, left_index=True, right_index=True).dropna()
         df = self._convert_to_period_index(df)
+
         
         # Feature processing
-        self.scaler = StandardScaler()
+        self.scaler = RobustScaler()
         processed_features = self._process_features(x, df.index)
+        processed_features = self.__drop_high_vif(processed_features)
         # Create analysis-ready dataframe
         self.df = pd.DataFrame(
             data=processed_features,
@@ -58,6 +61,26 @@ class AnalyzeCorrelation:
         """Uniform index formatting"""
         df.index = pd.to_datetime(df.index).to_period('D')
         return df
+    
+    def __drop_high_vif(self, df, threshold=200):
+        """Drop features with high VIF
+        Recommended threshold is 5, if not then the explanatory variables are highly collinear, 
+            and the parameter estimates will have large standard errors.
+            
+        Parameters:
+        - df: pd.DataFrame: The input dataframe
+        - threshold: float: The VIF threshold to drop features
+        """
+        vif_df = pd.DataFrame()
+        vif_df["VIF"] = [vif(df.values, i) for i in range(df.shape[1])]
+        vif_df["features"] = df.columns
+        high_vif = vif_df[vif_df["VIF"] > threshold]
+        if high_vif.shape[0] > 0:
+            if self.verbose:
+                print(f"High VIF features: {high_vif['features'].tolist()}")
+            return df.drop(columns=high_vif['features'])
+        return df
+
 
     def _process_features(self, x, index):
         """Feature engineering pipeline"""
@@ -68,6 +91,7 @@ class AnalyzeCorrelation:
             columns=x.columns,
             index=x.index
         )
+
 
     def _pca_decomposition(self, x, n_components=3):
         """Dimensionality reduction"""
@@ -87,6 +111,7 @@ class AnalyzeCorrelation:
             stationary_df, report, tests = self.stationary_tester.check_stationarity(self.df)
             self.stationary_report = report
             self.df = stationary_df
+
             if self.verbose:
                 print("Stationarity transformation complete")
                 print(pd.DataFrame(report).T)
@@ -146,6 +171,7 @@ class AnalyzeCorrelation:
         pass
 
 if __name__ == "__main__":
+    ###########################################################
     # Example configuration
     stationarity_cfg = {
         'adf': {'max_diff': 4, 'significance': 0.05},
@@ -157,26 +183,12 @@ if __name__ == "__main__":
         'significance_level': 0.05,
         'max_lag': 4
     }
+    ###########################################################
+    # Example usage
 
-    # # Updated test code
-    data = pd.read_csv('examples/data/stock_returns.csv', parse_dates=['Date'], index_col='Date').dropna(axis=1)
-    data = data.dropna(axis = 1)
-    target = np.random.choice(data.columns, 1)[0]
-    target = "SPY"
-    features = data.drop(columns=target).iloc[:, :]
-    x = features.copy()
-    y = data[target].copy()
-    
-    print('\n\n', y.name, '\n\n')
-    
-    # data = pd.read_csv("examples/data/hdd.csv", parse_dates=['date'], index_col='date')
-    # data = data.drop_duplicates().dropna()
-    # # Shift the target variable, forward by 1
-    # data['target'] = data['target'].shift(-1)
-    # data = data.dropna()
-    # x = data.drop(columns='target')
-    # y = data['target']
-    
+
+   
+    ###########################################################
     with AnalyzeCorrelation(
         x=x, y = y,
         stationarity_config=stationarity_cfg,

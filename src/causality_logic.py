@@ -3,10 +3,12 @@ import numpy as np
 import warnings
 from io import StringIO
 from statsmodels.tsa.vector_ar.var_model import VAR
-from src.granger import grangercausalitytests
 from itertools import combinations
-from src.stationary_checks import StationaryTests  
 from tqdm import tqdm 
+
+# Import granger causality tests
+from src.granger import grangercausalitytests
+from src.stationary_checks import StationaryTests  
 
 class CausalityAnalyzer:
     """
@@ -86,6 +88,9 @@ class CausalityAnalyzer:
         for x1,x2 in column_pairs:
             if x1 == target: 
                 out.append([x1,x2])
+            if x2 == target:
+                out.append([x2,x1])
+                
         return out
         
         
@@ -101,7 +106,6 @@ class CausalityAnalyzer:
         pbar.close()
         return results
     
-        
     def causality_tests(self, data, target):
         """Unified causality test interface"""
         results = {
@@ -109,7 +113,7 @@ class CausalityAnalyzer:
             'instantaneous': [],
             'contemporaneous': []
         }
-        
+        print(self._get_column_pairs(data, target))
         granger_tests = self.granger_test(data, target)
         for k, v in granger_tests.items():
             # Check p-values:
@@ -120,6 +124,10 @@ class CausalityAnalyzer:
             new_v = v.loc[mask_sums.index]
             if not new_v.empty:
                 results['granger'].append((k, new_v.index.values))
+            if self.verbose and not new_v.empty:
+                print(f'{k[1]} Does Granger Cause {k[0]} @ {self.significance_level}% confidence level')
+                print(new_v)
+
     
         return results
 

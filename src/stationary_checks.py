@@ -22,7 +22,9 @@ class StationaryTests:
             'kpss': {'significance': 0.05},
             'pp': {'significance': 0.05},
             'structural_break': True,
-            'seasonal': {'period': 12}
+            'seasonal': {'period': 12}, 
+            'gls': False,
+            'nonlinear': True
         }
     verbose : bool
         Whether to print detailed test results
@@ -32,9 +34,8 @@ class StationaryTests:
         self.default_config = {
             'adf': {'max_diff': 5, 'significance': 0.05},
             'kpss': {'significance': 0.05},
-            'seasonal': None,
             'structural_break': False,
-            'gls': False,
+            'gls': True,
             'nonlinear': True
         }
         self.test_config = test_config or self.default_config
@@ -45,9 +46,30 @@ class StationaryTests:
     def _kss_test(self, series, alpha=0.05):
         """
         Custom implementation of Kapetanios-Snell-Shin nonlinear stationarity test
+        From Kapetanios et al. (2003):
+           "a simple testing procedure to detect the presence of 
+            nonstationarity against nonlinear but globally stationary exponential 
+            smooth transition autoregressive processes."
+           
+        Null Hypothesis (H0): The time series has a unit root (Non-Stationary).
+        Alternate Hypothesis (H1): The time series has no unit root (Stationary).
+        
         References:
         - Kapetanios, G., Shin, Y., & Snell, A. (2003). Testing for a unit root 
           in the nonlinear STAR framework. Journal of Econometrics, 112(2), 359-379.
+          
+        Parameters:
+            - series: pd.Series: The time series to test
+            - alpha: float: The significance level
+        
+        Returns:
+            - dict: Test results. Example:
+                {
+                    'p': 0.05,
+                    'stationary': False,
+                    'test': 'KSS (Custom)',
+                    'alpha': 0.05
+                }
         """
         y = series.dropna().values
         n = len(y)
@@ -82,17 +104,28 @@ class StationaryTests:
             pval = 0.50  # Conservative upper bound
             
         return {
-            'test': 'KSS (custom)',
-            'statistic': t_stat,
-            'p': pval,
-            'critical_values': cv,
+            'test': 'Non-Linear Stationarity test',
             'stationary': t_stat < cv['5%'],
-            'alpha': alpha,
-            'warning': 'Critical values approximated for T=100, use bootstrap for exact values'
+            'p': pval,
+            'alpha': alpha
         }
 
     def _run_test_battery(self, series):
-        """Execute all configured stationarity tests"""
+        """
+        
+        Execute all configured stationarity tests
+        
+        Parameters:
+            - series: pd.Series: The time series to test
+            
+        Returns:
+            - dict: Results of all tests. Example:
+                {
+                    'adf': {'p': 0.05, 'stationary': False, 'test': 'ADF', 'alpha': 0.05},
+                    'kpss': {'p': 0.05, 'stationary': False, 'test': 'KPSS', 'alpha': 0.05}
+                }
+        
+        """
         results = {}
         
         # Core tests
@@ -111,12 +144,7 @@ class StationaryTests:
         # Structural break test
         if self.test_config.get('structural_break'):
             results['zivot_andrews'] = self.zivot_andrews_test(series)
-
-        # Seasonal tests
-        if self.test_config.get('seasonal'):
-            period = self.test_config['seasonal'].get('period', 12)
-            results.update(self.seasonal_tests(series, period))
-
+            
         # Advanced tests
         if self.test_config.get('gls'):
             results['dfgls'] = self.dfgls_test(series)
@@ -128,54 +156,171 @@ class StationaryTests:
 
     @staticmethod
     def adf_test(series, alpha=0.05):
-        """Augmented Dickey-Fuller test"""
+        """
+        Perform Augmented Dickey-Fuller test for stationarity.
+
+        Null Hypothesis (H0): The time series is Trend Stationary
+        Alternate Hypothesis (H1): The time series is Non-Stationary (has a unit root)
+
+        Parameters:
+            - series: pd.Series: The time series to test
+            - alpha: float: The significance level
+        
+        Returns:
+            - dict: Test results. Example:
+                {
+                    'p': 0.05,
+                    'stationary': False,
+                    'test': 'ADF',
+                    'alpha': 0.05
+                }
+        """
         result = adfuller(series.dropna())
         return {
-            'p': result[1],
+            'test': 'Stationarity (ADF)',
             'stationary': result[1] < alpha,
-            'test': 'ADF',
+            'p': result[1],
             'alpha': alpha
         }
 
     @staticmethod
     def kpss_test(series, alpha=0.05, regression='c'):
-        """Kwiatkowski-Phillips-Schmidt-Shin test"""
+        """
+        Kwiatkowski-Phillips-Schmidt-Shin (KPSS) test
+    
+        - Used for testing if an observable time series is stationary around a determinstic trend. 
+        - The absense of a unit root in a time series indicates a trend-stationary process.
+        - This means that the mean of the series can be growing or decreasing over time. 
+        - In a presnece of a shock, trend stationary process are mean-reverting. 
+
+        Null Hypothesis (H0): The process is trend-stationary.
+        Alternative Hypothesis (H1): The process has a unit root (non-stationary).
+
+        Parameters:
+            - series: pd.Series: The time series to test
+            - alpha: float: The significance level
+            - regression: str: The type of trend component to include in the test
+                - 'c': Constant term only
+                - 'ct': Constant and trend
+                - 'ctt': Constant, trend, and quadratic trend
+        
+        Returns:
+            - dict: Test results. Example:
+                {
+                    'p': 0.05,
+                    'stationary': False,
+                    'test': 'KPSS',
+                    'alpha': 0.05
+                }
+    
+        """
         result = kpss(series, regression=regression)
         return {
-            'p': result[1],
+            'test': 'Trend Stationarity',
             'stationary': result[1] > alpha,  # KPSS has inverse logic
-            'test': 'KPSS',
+            'p': result[1],
             'alpha': alpha
         }
 
     def phillips_perron_test(self, series, alpha=0.05):
-        """Phillips-Perron test"""
+        """
+        Phillips-Perron test
+        A unit root test used to test the the null hypothesis that 
+        
+        Null Hypothesis (H0): The time series has a unit root (Non-Stationary).
+        Alternate Hypothesis (H1): The time series has no unit root (Stationary).
+        
+        Fail to Reject the null hypothesis if the p-value is less than the significance level.
+        
+        Parameters:
+            - series: pd.Series: The time series to test
+            - alpha: float: The significance level
+        
+        Returns:
+            - dict: Test results. Example:
+                {
+                    'p': 0.05,
+                    'stationary': False,
+                    'test': 'Phillips-Perron',
+                    'alpha': 0.05
+        }
+    
+        """
         result = PhillipsPerron(series.dropna())
         return {
-            'p': result.pvalue,
+            'test': 'Unit Root',
             'stationary': result.pvalue < alpha,
-            'test': 'Phillips-Perron',
+            'p': result.pvalue,
             'alpha': alpha
         }
 
     def zivot_andrews_test(self, series, alpha=0.05):
-        """Zivot-Andrews structural break test"""
-        result = ZivotAndrews(series.dropna())
+        """
+        Wrapper for arch.unitroot.ZivotAndrews: 
+        https://arch.readthedocs.io/en/latest/unitroot/generated/arch.unitroot.ZivotAndrews.html
+        
+        Zivot-Andrews structural break test
+        Algorithm follows Baum (2004/2015) approximation to original Zivot-Andrews method. 
+        Rather than performing an autolag regression at each candidate break period (as per the original paper), 
+        a single autolag regression is run up-front on the base model (constant + trend with no dummies) 
+        to determine the best lag length. This lag length is then used for all subsequent break-period regressions. 
+        This results in significant run time reduction but also slightly more 
+        pessimistic test statistics than the original Zivot-Andrews method.
+    
+        Null Hypothesis (H0): The process contains a unit root with a single structural break.
+        Alternate Hypothesis (H1): The process is trend and break stationary.
+        
+        Accept the null hypothesis if the p-value is less than the significance level.
+        
+        Parameters:
+            - series: pd.Series: The time series to test
+            - alpha: float: The significance level
+        
+        Returns:
+            - dict: Test results. Example:
+                {
+                    'p': 0.05,
+                    'stationary': False,
+                    'test': 'Zivot-Andrews',
+                    'alpha': 0.05
+                }
+        """
+        result = ZivotAndrews(series)
         return {
+            'test': 'Structural Break',
+            'stationary': float(result.pvalue) < alpha,
             'p': result.pvalue,
-            'stationary': result.pvalue < alpha,
-            'breakpoint': result.break_date,
-            'test': 'Zivot-Andrews',
             'alpha': alpha
         }
 
     def dfgls_test(self, series, alpha=0.05):
-        """Elliott-Rothenberg-Stock GLS detrended test"""
+        """
+        Elliott-Rothenberg-Stock GLS detrended test
+        The null hypothesis of the Dickey-Fuller GLS is that there is a unit root, 
+        with the alternative that there is no unit root. If the pvalue is above a critical size, 
+        then the null cannot be rejected and the series appears to be a unit root.
+        
+        Null Hypothesis (H0): The time series has a unit root (Non-Stationary).
+        Alternate Hypothesis (H1): The time series has no unit root (Weakly Stationary).
+        
+        Parameters: 
+            - series: pd.Series: The time series to test
+            - alpha: float: The significance level
+        
+        Returns:
+            - dict: Test results. Example:
+                {
+                    'p': 0.05,
+                    'stationary': False,
+                    'test': 'DFGLS',
+                    'alpha': 0.05
+                }
+        """
         result = DFGLS(series.dropna())
         return {
+            'test': 'Unit Root',
             'p': result.pvalue,
             'stationary': result.pvalue < alpha,
-            'test': 'DFGLS',
             'alpha': alpha
         }
 
@@ -221,13 +366,21 @@ class StationaryTests:
         # Example: Require both ADF and KPSS agreement
         adf = test_results.get('adf', {}).get('stationary', False)
         kpss = test_results.get('kpss', {}).get('stationary', False)
+        zivot = test_results.get('zivot_andrews', {}).get('stationary', False)
+        dfgls = test_results.get('dfgls', {}).get('stationary', False)
+        kss = test_results.get('kss', {}).get('stationary', False)
+
+        majority = sum([adf, kpss, zivot, dfgls, kss]) >= 3
         
-        if adf and kpss:
+        # if adf and kpss:
+        #     return True
+        # elif not adf and not kpss:
+        #     return False
+        if majority:
             return True
-        elif not adf and not kpss:
-            return False
         else:
             # Handle conflicting results
+            test_results['Conflicting'] = True
             if self.verbose:
                 print("Conflicting test results - applying conservative differencing")
             return False
@@ -262,43 +415,50 @@ class StationaryTests:
                 diff_count += 1
 
             # Store results with a new column name
-            stationary_df[col+f'_{diff_count}'] = current_series
+            # stationary_df[col+f'_{diff_count}'] = current_series
+            stationary_df[col] = current_series
             # If non-stationary drop column 
-            if self._is_stationary(test_results):
-                stationary_df = stationary_df.drop(columns = [col])
+            # if self._is_stationary(test_results): stationary_df = stationary_df.drop(columns = [col])
             full_results[col] = col_results
             report[col] = {
                 'diffs_applied': diff_count,
                 'final_status': 'stationary' if diff_count < self.test_config['adf']['max_diff'] else 'non-stationary'
             }
-
+            
             if self.verbose:
                 print(f"{col}: {diff_count} differences applied")
                 print("Last test results:", {k:v for k,v in test_results.items() if k not in ['seasonal_decomp', 'canova_hansen']})
         
-        stationary_df = stationary_df.dropna()
+        max_diff = max([v['diffs_applied'] for v in report.values()])
+        
+        stationary_df = stationary_df.iloc[max_diff:]
         return stationary_df, report, full_results
 
 
 if __name__ == "__main__":
-    print(""" 7.4: Earth, water, fire, air, ether, mind, spiritual intelligence and false ego; thus these are the eightfold divisions of my external energy.\n""")
+    print(""" 10.11: Out of compassion for them, I situated within the heart, certainly destroy the darkness born of ignorance with the radiant light of knowledge. \n""")
     ###########################################################
-    ########################################################### 
-    # data = pd.read_csv('examples/data/stock_returns.csv', parse_dates=['Date'], index_col='Date').iloc[1:].cumsum()
-    # data = data["2000-01-01":].dropna(axis = 1)
-    # random_20_stocks = np.random.choice(data.columns, 60, replace = False)
-    # random_y = np.random.choice(random_20_stocks, 1, replace = False)[0]
-    # x = data.drop(columns = random_y).iloc[:-1]
-    # y = data[random_y].iloc[:-1]
-    # print('\n\n', y.name, '\n\n')
+    from data import *
+    x, y = test_data1(return_xy=True, path_to_src='src/')
+    print(x.head()) 
+    ###########################################################
+    config =   {
+            'adf': {'max_diff': 5, 'significance': 0.05},
+            'kpss': {'significance': 0.05},
+            'pp': {'significance': 0.05},
+            'structural_break': True,
+            'gls': True,
+            'nonlinear': True
+        }
     
-    # st = StationaryTests(verbose=False)
-    # x, report, results = st.check_stationarity(x)
-    # print(report)
+    sc = StationaryTests(config, verbose=False)
+    stationary_df, report, full_results = sc.check_stationarity(x)
     
-    data = pd.read_csv("examples/data/hdd.csv", parse_dates=['date'], index_col='date')
-    # data['target'] = data['target'].shift(-1)
-    x = data.drop(columns='target')
-    # y = data['target']
-    sc = StationaryTests(verbose=True)
-    df, report, summary = sc.check_stationarity(x)
+    for k, v in full_results.items():
+        print(k)
+        for j in v: 
+            for i, m in j.items():
+                print(i, m)
+            print("\n")
+    
+    print(report)

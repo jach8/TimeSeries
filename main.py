@@ -18,11 +18,12 @@ class Analyze:
         self.default_stationary_config = {
             'adf': {'max_diff': 5, 'significance': 0.05},
             'kpss': {'significance': 0.05},
-            'seasonal': None,
-            'structural_break': False,
-            'gls': False,
+            'pp': {'significance': 0.05},
+            'structural_break': True,
+            'gls': True,
             'nonlinear': True
         }
+    
         self.default_causality_config = {
             'significance_level': 0.05,
             'max_lag': 3
@@ -46,6 +47,7 @@ class Analyze:
         """
         self.AC = AnalyzeCorrelation(
             x, y,
+            decompose=decompose,
             verbose=self.verbose, 
             stationarity_config=self.stationary_config, 
             causality_config=self.causality_config
@@ -71,8 +73,21 @@ if __name__ == "__main__":
     # Example usage
     import pandas as pd
     from src.data import *
-    x, y = random_test_data(n=500, return_xy=True)
+    x, y = test_data3(return_xy=True, path_to_src='src/')
+    x = x.dropna(axis = 1)
+    print(x.shape, y.shape)
     
+    y.name = 'spy'
+    # print(x.head().iloc[:,:])
     # Initialize the analysis
     a = Analyze(verbose=False)
-    a.results(x, y)
+    d = a.results(x, y, decompose=False)
+    
+    print("\nNew Data with Stationarity Transformation:")
+    print(d['new_data'])
+
+    print("\Stationary Analysis:")
+    print(d['stationarity_report'])
+    
+    print("\nKey Findings:")
+    print(f"Significant Granger causes: {d['causality']}")
