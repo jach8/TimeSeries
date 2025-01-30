@@ -180,6 +180,7 @@ class CausalityAnalyzer:
         results = {
             'granger': [],
             'instantaneous': [],
+            'impulse_response': [],
         }
         granger_tests = self.granger_test(data, target)
         for k, v in granger_tests.items():
@@ -192,8 +193,7 @@ class CausalityAnalyzer:
             if not new_v.empty:
                 results['granger'].append((k, new_v.index.values))
             if self.verbose and not new_v.empty:
-                print(f'{k[1]} Does Granger Cause {k[0]} @ {self.significance_level}% confidence level')
-                print(new_v)
+                print(f'{k[1]} Does Granger Cause {k[0]} @ {self.significance_level}% confidence level, Lags: {new_v.index.values}')
         print('\n')
 
         if model:
