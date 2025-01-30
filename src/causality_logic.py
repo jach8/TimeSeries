@@ -135,6 +135,25 @@ class CausalityAnalyzer:
                     print(f'{i} has an instantaneous causal effect on {target} @ {confi}% confidence level, p-value: {t[1][2].data}')
                     
         return instaneous_cause
+    
+    def impulse_response(self, fit, data, target):
+        """
+        Calculate the impulse response of the target variable
+        
+        Parameters:
+            - fit: The VAR model fit
+            - data: The data to analyze
+            - target: The target variable
+        
+        Returns:
+            - pd.DataFrame: The impulse response
+        
+        """
+        try:
+            irf = fit.irf(10)
+        except Exception as e:
+            raise ValueError(f"Error in Impulse Response Function: {str(e)}")
+        return irf
         
     
     def causality_tests(self, data, target, model = None):
@@ -161,7 +180,6 @@ class CausalityAnalyzer:
         results = {
             'granger': [],
             'instantaneous': [],
-            # 'contemporaneous': []
         }
         granger_tests = self.granger_test(data, target)
         for k, v in granger_tests.items():
@@ -181,6 +199,8 @@ class CausalityAnalyzer:
         if model:
             # Instantaneous causality test
             results['instantaneous'] = self.instantaneous_causality(model, data, target)
+            # Impulse Response Function
+            results['impulse_response'] = self.impulse_response(model, data, target)
         return results
 
 
