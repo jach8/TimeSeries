@@ -1,3 +1,6 @@
+
+
+
 import pandas as pd
 import numpy as np
 from tqdm import tqdm
@@ -8,6 +11,11 @@ from statsmodels.tsa.seasonal import seasonal_decompose
 from statsmodels.regression.linear_model import OLS
 from statsmodels.tsa.tsatools import lagmat
 import warnings
+from typing import Dict, Optional, List, Union, Tuple
+import logging
+
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 class StationaryTests:
     """
@@ -30,7 +38,7 @@ class StationaryTests:
         Whether to print detailed test results
     """
     
-    def __init__(self, test_config=None, verbose=False):
+    def __init__(self, test_config: Optional[Dict] = None, verbose: bool = False):
         self.default_config = {
             'adf': {'max_diff': 5, 'significance': 0.05},
             'kpss': {'significance': 0.05},
@@ -43,7 +51,7 @@ class StationaryTests:
         self._test_history = []
         warnings.filterwarnings("ignore")
         
-    def _kss_test(self, series, alpha=0.05):
+    def _kss_test(self, series: pd.Series, alpha: float = 0.05) -> Dict:
         """
         Custom implementation of Kapetanios-Snell-Shin nonlinear stationarity test
         From Kapetanios et al. (2003):
@@ -110,67 +118,72 @@ class StationaryTests:
             'alpha': alpha
         }
 
-    def _run_test_battery(self, series):
+    def _run_test_battery(self, series: pd.Series) -> Dict[str, Dict]:
         """
-        
-        Execute all configured stationarity tests
+        Execute all configured stationarity tests.
         
         Parameters:
-            - series: pd.Series: The time series to test
+            - series: pd.Series: The time series to test.
             
         Returns:
-            - dict: Results of all tests. Example:
+            - Dict[str, Dict]: Results of all tests. Example:
                 {
                     'adf': {'p': 0.05, 'stationary': False, 'test': 'ADF', 'alpha': 0.05},
                     'kpss': {'p': 0.05, 'stationary': False, 'test': 'KPSS', 'alpha': 0.05}
                 }
-        
         """
-        results = {}
-        
-        # Core tests
-        if 'adf' in self.test_config:
-            results['adf'] = self.adf_test(
-                series, 
-                self.test_config['adf']['significance']
-            )
-            
-        if 'kpss' in self.test_config:
-            results['kpss'] = self.kpss_test(
-                series,
-                self.test_config['kpss']['significance']
-            )
+        try:
+            if not isinstance(series, pd.Series):
+                raise ValueError("Input 'series' must be a pandas Series.")
+            if series.empty:
+                raise ValueError("Input series is empty.")
 
-        # Structural break test
-        if self.test_config.get('structural_break'):
-            results['zivot_andrews'] = self.zivot_andrews_test(series)
-        
-        if self.test_config.get('pp'):
-            results['pp'] = self.phillips_perron_test(series)
+            results: Dict[str, Dict] = {}
             
-        # Advanced tests
-        if self.test_config.get('gls'):
-            results['dfgls'] = self.dfgls_test(series)
+            # Core tests
+            if 'adf' in self.test_config:
+                adf_config = self.test_config['adf']
+                results['adf'] = self.adf_test(series, adf_config['significance'])
             
-        if self.test_config.get('nonlinear'):
-            results['kss'] = self._kss_test(series)
+            if 'kpss' in self.test_config:
+                kpss_config = self.test_config['kpss']
+                results['kpss'] = self.kpss_test(series, kpss_config['significance'])
 
-        return results
+            # Structural break test
+            if self.test_config.get('structural_break'):
+                results['zivot_andrews'] = self.zivot_andrews_test(series)
+            
+            if self.test_config.get('pp'):
+                pp_config = self.test_config['pp']
+                results['pp'] = self.phillips_perron_test(series, pp_config['significance'])
+                
+            # Advanced tests
+            if self.test_config.get('gls'):
+                results['dfgls'] = self.dfgls_test(series)
+                
+            if self.test_config.get('nonlinear'):
+                results['kss'] = self._kss_test(series)
+
+            logger.info("Test battery executed for series: %s", series.name)
+            return results
+        except Exception as e:
+            logger.error("Error in _run_test_battery: %s", e)
+            raise
 
     @staticmethod
-    def adf_test(series, alpha=0.05):
+    def adf_test(series: pd.Series, alpha: float = 0.05) -> Dict:
         """
         Perform Augmented Dickey-Fuller test for stationarity.
 
-        Null Hypothesis (H0): The time series is Trend Stationary
-        Alternate Hypothesis (H1): The time series is Non-Stationary (has a unit root)
+        Null Hypothesis (H0): The time series has a unit root (Non-Stationary).
+        Alternate Hypothesis (H1): The time series is stationary.
 
         Parameters:
-            - series: pd.Series: The time series to test
-            - alpha: float: The significance level
+            - series: pd.Series: The time series to test.
+            - alpha: float: The significance level.
         
         Returns:
-            - dict: Test results. Example:
+            - Dict: Test results. Example:
                 {
                     'p': 0.05,
                     'stationary': False,
@@ -178,109 +191,132 @@ class StationaryTests:
                     'alpha': 0.05
                 }
         """
-        result = adfuller(series.dropna())
-        return {
-            'test': 'Stationarity (ADF)',
-            'stationary': result[1] < alpha,
-            'p': result[1],
-            'alpha': alpha
-        }
+        try:
+            if not isinstance(series, pd.Series):
+                raise ValueError("Input 'series' must be a pandas Series.")
+            if series.empty:
+                raise ValueError("Input series is empty.")
+            if not isinstance(alpha, (int, float)) or alpha <= 0 or alpha >= 1:
+                raise ValueError("alpha must be a float between 0 and 1.")
+
+            result = adfuller(series.dropna())
+            test_result = {
+                'test': 'Stationarity (ADF)',
+                'stationary': result[1] < alpha,
+                'p': result[1],
+                'alpha': alpha
+            }
+            logger.info("ADF test completed: %s", test_result)
+            return test_result
+        except Exception as e:
+            logger.error("Error in ADF test: %s", e)
+            raise
 
     @staticmethod
-    def kpss_test(series, alpha=0.05, regression='c'):
+    def kpss_test(series: pd.Series, alpha: float = 0.05, regression: str = 'c') -> Dict:
         """
-        Kwiatkowski-Phillips-Schmidt-Shin (KPSS) test
-    
-        - Used for testing if an observable time series is stationary around a determinstic trend. 
-        - The absense of a unit root in a time series indicates a trend-stationary process.
-        - This means that the mean of the series can be growing or decreasing over time. 
-        - In a presnece of a shock, trend stationary process are mean-reverting. 
+        Kwiatkowski-Phillips-Schmidt-Shin (KPSS) test.
 
         Null Hypothesis (H0): The process is trend-stationary.
         Alternative Hypothesis (H1): The process has a unit root (non-stationary).
 
         Parameters:
-            - series: pd.Series: The time series to test
-            - alpha: float: The significance level
-            - regression: str: The type of trend component to include in the test
-                - 'c': Constant term only
-                - 'ct': Constant and trend
-                - 'ctt': Constant, trend, and quadratic trend
+            - series: pd.Series: The time series to test.
+            - alpha: float: The significance level.
+            - regression: str: The type of trend component to include in the test.
+                - 'c': Constant term only.
+                - 'ct': Constant and trend.
+                - 'ctt': Constant, trend, and quadratic trend.
         
         Returns:
-            - dict: Test results. Example:
+            - Dict: Test results. Example:
                 {
                     'p': 0.05,
                     'stationary': False,
                     'test': 'KPSS',
                     'alpha': 0.05
                 }
-    
         """
-        result = kpss(series, regression=regression)
-        return {
-            'test': 'Trend Stationarity',
-            'stationary': result[1] > alpha,  # KPSS has inverse logic
-            'p': result[1],
-            'alpha': alpha
-        }
+        try:
+            if not isinstance(series, pd.Series):
+                raise ValueError("Input 'series' must be a pandas Series.")
+            if series.empty:
+                raise ValueError("Input series is empty.")
+            if not isinstance(alpha, (int, float)) or alpha <= 0 or alpha >= 1:
+                raise ValueError("alpha must be a float between 0 and 1.")
+            if regression not in ['c', 'ct', 'ctt']:
+                raise ValueError("regression must be one of ['c', 'ct', 'ctt'].")
 
-    def phillips_perron_test(self, series, alpha=0.05):
+            result = kpss(series, regression=regression)
+            test_result = {
+                'test': 'Trend Stationarity (KPSS)',
+                'stationary': result[1] > alpha,  # KPSS has inverse logic
+                'p': result[1],
+                'alpha': alpha
+            }
+            logger.info("KPSS test completed: %s", test_result)
+            return test_result
+        except Exception as e:
+            logger.error("Error in KPSS test: %s", e)
+            raise
+
+    def phillips_perron_test(self, series: pd.Series, alpha: float = 0.05) -> Dict:
         """
-        Phillips-Perron test
-        A unit root test used to test the the null hypothesis that 
-        
+        Phillips-Perron test.
+
         Null Hypothesis (H0): The time series has a unit root (Non-Stationary).
         Alternate Hypothesis (H1): The time series has no unit root (Stationary).
         
-        Fail to Reject the null hypothesis if the p-value is less than the significance level.
-        
         Parameters:
-            - series: pd.Series: The time series to test
-            - alpha: float: The significance level
+            - series: pd.Series: The time series to test.
+            - alpha: float: The significance level.
         
         Returns:
-            - dict: Test results. Example:
+            - Dict: Test results. Example:
                 {
                     'p': 0.05,
                     'stationary': False,
                     'test': 'Phillips-Perron',
                     'alpha': 0.05
-        }
-    
+                }
         """
-        result = PhillipsPerron(series.dropna())
-        return {
-            'test': 'Unit Root',
-            'stationary': result.pvalue < alpha,
-            'p': result.pvalue,
-            'alpha': alpha
-        }
+        try:
+            if not isinstance(series, pd.Series):
+                raise ValueError("Input 'series' must be a pandas Series.")
+            if series.empty:
+                raise ValueError("Input series is empty.")
+            if not isinstance(alpha, (int, float)) or alpha <= 0 or alpha >= 1:
+                raise ValueError("alpha must be a float between 0 and 1.")
 
-    def zivot_andrews_test(self, series, alpha=0.05):
+            result = PhillipsPerron(series.dropna())
+            test_result = {
+                'test': 'Unit Root (Phillips-Perron)',
+                'stationary': result.pvalue < alpha,
+                'p': result.pvalue,
+                'alpha': alpha
+            }
+            logger.info("Phillips-Perron test completed: %s", test_result)
+            return test_result
+        except Exception as e:
+            logger.error("Error in Phillips-Perron test: %s", e)
+            raise
+
+    def zivot_andrews_test(self, series: pd.Series, alpha: float = 0.05) -> Dict:
         """
-        Wrapper for arch.unitroot.ZivotAndrews: 
+        Wrapper for arch.unitroot.ZivotAndrews:
         https://arch.readthedocs.io/en/latest/unitroot/generated/arch.unitroot.ZivotAndrews.html
         
-        Zivot-Andrews structural break test
-        Algorithm follows Baum (2004/2015) approximation to original Zivot-Andrews method. 
-        Rather than performing an autolag regression at each candidate break period (as per the original paper), 
-        a single autolag regression is run up-front on the base model (constant + trend with no dummies) 
-        to determine the best lag length. This lag length is then used for all subsequent break-period regressions. 
-        This results in significant run time reduction but also slightly more 
-        pessimistic test statistics than the original Zivot-Andrews method.
-    
+        Zivot-Andrews structural break test.
+        
         Null Hypothesis (H0): The process contains a unit root with a single structural break.
         Alternate Hypothesis (H1): The process is trend and break stationary.
-        
-        Accept the null hypothesis if the p-value is less than the significance level.
         
         Parameters:
             - series: pd.Series: The time series to test
             - alpha: float: The significance level
         
         Returns:
-            - dict: Test results. Example:
+            - Dict: Test results. Example:
                 {
                     'p': 0.05,
                     'stationary': False,
@@ -288,41 +324,45 @@ class StationaryTests:
                     'alpha': 0.05
                 }
         """
-        # If the numbers are too large, the test will fail
         try:
+            if not isinstance(series, pd.Series):
+                raise ValueError("Input 'series' must be a pandas Series.")
+            if series.empty:
+                raise ValueError("Input series is empty.")
+            if not isinstance(alpha, (int, float)) or alpha <= 0 or alpha >= 1:
+                raise ValueError("alpha must be a float between 0 and 1.")
+
             result = ZivotAndrews(series)
             out = {
                 'test': 'Structural Break',
                 'stationary': float(result.pvalue) < alpha,
-                'p': result.pvalue,
+                'p': float(result.pvalue),
                 'alpha': alpha
             }
-        except:
-            out = {
+            logger.info("Zivot-Andrews test completed: %s", out)
+            return out
+        except Exception as e:
+            logger.error("Error in Zivot-Andrews test: %s", e)
+            return {
                 'test': 'Structural Break',
                 'stationary': False,
-                'p': 1,
+                'p': 1.0,
                 'alpha': alpha
             }
-        return out
 
-
-    def dfgls_test(self, series, alpha=0.05):
+    def dfgls_test(self, series: pd.Series, alpha: float = 0.05) -> Dict:
         """
-        Elliott-Rothenberg-Stock GLS detrended test
-        The null hypothesis of the Dickey-Fuller GLS is that there is a unit root, 
-        with the alternative that there is no unit root. If the pvalue is above a critical size, 
-        then the null cannot be rejected and the series appears to be a unit root.
+        Elliott-Rothenberg-Stock GLS detrended test.
         
         Null Hypothesis (H0): The time series has a unit root (Non-Stationary).
         Alternate Hypothesis (H1): The time series has no unit root (Weakly Stationary).
         
-        Parameters: 
+        Parameters:
             - series: pd.Series: The time series to test
             - alpha: float: The significance level
         
         Returns:
-            - dict: Test results. Example:
+            - Dict: Test results. Example:
                 {
                     'p': 0.05,
                     'stationary': False,
@@ -330,122 +370,212 @@ class StationaryTests:
                     'alpha': 0.05
                 }
         """
-        result = DFGLS(series.dropna())
-        return {
-            'test': 'Unit Root',
-            'p': result.pvalue,
-            'stationary': result.pvalue < alpha,
-            'alpha': alpha
-        }
+        try:
+            if not isinstance(series, pd.Series):
+                raise ValueError("Input 'series' must be a pandas Series.")
+            if series.empty:
+                raise ValueError("Input series is empty.")
+            if not isinstance(alpha, (int, float)) or alpha <= 0 or alpha >= 1:
+                raise ValueError("alpha must be a float between 0 and 1.")
 
-    def kapetanios_test(self, series, alpha=0.05):
-        """Kapetanios-Snell-Shin nonlinear test"""
-        result = _kss_test(series.dropna())
-        return {
-            'p': result.pvalue,
-            'stationary': result.pvalue < alpha,
-            'test': 'KSS',
-            'alpha': alpha
-        }
-     
-    def seasonal_tests(self, series, period=12):
-        """Seasonal diagnostics package"""
-        results = {}
-        
-        # Canova-Hansen test
-        ch_result = CHTest().is_stationary(series)
-        results['canova_hansen'] = {
-            'stationary': ch_result,
-            'test': 'Canova-Hansen',
-            'period': period
-        }
+            result = DFGLS(series.dropna())
+            out = {
+                'test': 'Unit Root (DFGLS)',
+                'p': float(result.pvalue),
+                'stationary': result.pvalue < alpha,
+                'alpha': alpha
+            }
+            logger.info("DFGLS test completed: %s", out)
+            return out
+        except Exception as e:
+            logger.error("Error in DFGLS test: %s", e)
+            raise
 
-        # Seasonal decomposition
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            decomp = seasonal_decompose(series.dropna(), period=period)
-            seasonal_stationary = self.adf_test(decomp.seasonal)
-            
-        results['seasonal_decomp'] = {
-            'seasonal_stationary': seasonal_stationary['stationary'],
-            'residual_stationary': self.adf_test(decomp.resid)['stationary'],
-            'test': 'Seasonal Decomposition'
-        }
-        
-        return results
-
-    def _is_stationary(self, test_results):
-        """Decision logic combining multiple test results"""
-        # Implement your decision logic here
-        # Example: Require both ADF and KPSS agreement
-        adf = test_results.get('adf', {}).get('stationary', False)
-        kpss = test_results.get('kpss', {}).get('stationary', False)
-        zivot = test_results.get('zivot_andrews', {}).get('stationary', False)
-        dfgls = test_results.get('dfgls', {}).get('stationary', False)
-        kss = test_results.get('kss', {}).get('stationary', False)
-
-        majority = sum([adf, kpss, zivot, dfgls, kss]) >= 3
-        
-        # if adf and kpss:
-        #     return True
-        # elif not adf and not kpss:
-        #     return False
-        if majority:
-            return True
-        else:
-            # Handle conflicting results
-            test_results['Conflicting'] = True
-            if self.verbose:
-                print("Conflicting test results - applying conservative differencing")
-            return False
-
-    def check_stationarity(self, df):
+    def kapetanios_test(self, series: pd.Series, alpha: float = 0.05) -> Dict:
         """
-        Enhanced stationarity check with multiple diagnostics
+        Kapetanios-Snell-Shin nonlinear test.
+        
+        Parameters:
+            - series: pd.Series: The time series to test
+            - alpha: float: The significance level
+        
         Returns:
-        - Stationary DataFrame
-        - Differencing report
-        - Full test results
+            - Dict: Test results.
         """
-        stationary_df = df.copy()
-        report = {}
-        full_results = {}
-        pbar = tqdm(df.columns, desc="Stationarity Check")
-        for col in pbar:
-            pbar.set_description(f"Stationarity {col}")
-            current_series = df[col]
-            diff_count = 0
-            col_results = []
+        try:
+            if not isinstance(series, pd.Series):
+                raise ValueError("Input 'series' must be a pandas Series.")
+            if series.empty:
+                raise ValueError("Input series is empty.")
+            if not isinstance(alpha, (int, float)) or alpha <= 0 or alpha >= 1:
+                raise ValueError("alpha must be a float between 0 and 1.")
 
-            for _ in range(self.test_config['adf']['max_diff'] + 1):
-                test_results = self._run_test_battery(current_series.dropna())
-                col_results.append(test_results)
+            result = self._kss_test(series.dropna(), alpha)
+            out = {
+                'p': result['p'],
+                'stationary': result['stationary'],
+                'test': 'KSS',
+                'alpha': alpha
+            }
+            logger.info("Kapetanios test completed: %s", out)
+            return out
+        except Exception as e:
+            logger.error("Error in Kapetanios test: %s", e)
+            raise
+
+    def seasonal_tests(self, series: pd.Series, period: int = 12) -> Dict:
+        """
+        Seasonal diagnostics package.
+        
+        Parameters:
+            - series: pd.Series: The time series to test
+            - period: int: The period for seasonal decomposition
+        
+        Returns:
+            - Dict: Seasonal test results.
+        """
+        try:
+            if not isinstance(series, pd.Series):
+                raise ValueError("Input 'series' must be a pandas Series.")
+            if series.empty:
+                raise ValueError("Input series is empty.")
+            if not isinstance(period, int) or period <= 0:
+                raise ValueError("period must be a positive integer.")
+
+            results: Dict = {}
+            
+            # Canova-Hansen test
+            ch_result = CHTest().is_stationary(series)
+            results['canova_hansen'] = {
+                'stationary': ch_result,
+                'test': 'Canova-Hansen',
+                'period': period
+            }
+
+            # Seasonal decomposition
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                decomp = seasonal_decompose(series.dropna(), period=period)
+                seasonal_stationary = self.adf_test(decomp.seasonal)
                 
-                if self._is_stationary(test_results):
-                    break
-                    
-                # Apply differencing
-                current_series = current_series.diff()
-                diff_count += 1
-
-            # Store results with a new column name
-            # stationary_df[col+f'_{diff_count}'] = current_series
-            stationary_df[col] = current_series
-            # If non-stationary drop column 
-            # if self._is_stationary(test_results): stationary_df = stationary_df.drop(columns = [col])
-            full_results[col] = col_results
-            report[col] = {
-                'diffs_applied': diff_count,
-                'final_status': 'stationary' if diff_count < self.test_config['adf']['max_diff'] else 'non-stationary'
+            results['seasonal_decomp'] = {
+                'seasonal_stationary': seasonal_stationary['stationary'],
+                'residual_stationary': self.adf_test(decomp.resid)['stationary'],
+                'test': 'Seasonal Decomposition'
             }
             
-            if self.verbose:
-                print(f"{col}: {diff_count} differences applied")
-                print("Last test results:", {k:v for k,v in test_results.items() if k not in ['seasonal_decomp', 'canova_hansen']})
+            logger.info("Seasonal tests completed for series: %s", series.name)
+            return results
+        except Exception as e:
+            logger.error("Error in seasonal_tests: %s", e)
+            raise
+
+    def _is_stationary(self, test_results: Dict) -> bool:
+        """
+        Decision logic combining multiple test results.
         
-        max_diff = max([v['diffs_applied'] for v in report.values()])
-        stationary_df = stationary_df.iloc[max_diff:]
-        return stationary_df, report, full_results
+        Parameters:
+            - test_results: Dict: Results from stationarity tests.
+        
+        Returns:
+            - bool: Whether the series is considered stationary.
+        """
+        try:
+            adf = test_results.get('adf', {}).get('stationary', False)
+            kpss = test_results.get('kpss', {}).get('stationary', False)
+            zivot = test_results.get('zivot_andrews', {}).get('stationary', False)
+            dfgls = test_results.get('dfgls', {}).get('stationary', False)
+            kss = test_results.get('kss', {}).get('stationary', False)
+
+            majority = sum([adf, kpss, zivot, dfgls, kss]) >= 3
+            
+            if majority:
+                return True
+            else:
+                test_results['Conflicting'] = True
+                if self.verbose:
+                    logger.warning("Conflicting test results - applying conservative differencing")
+                return False
+        except Exception as e:
+            logger.error("Error in _is_stationary: %s", e)
+            raise
+
+    def check_stationarity(self, df: pd.DataFrame) -> Tuple[pd.DataFrame, Dict, Dict]:
+        """
+        Enhanced stationarity check with multiple diagnostics.
+        
+        Parameters:
+            - df: pd.DataFrame: Input DataFrame with time series columns.
+        
+        Returns:
+            - Tuple[pd.DataFrame, Dict, Dict]: 
+                - Stationary DataFrame
+                - Differencing report
+                - Full test results
+        """
+        try:
+            if not isinstance(df, pd.DataFrame):
+                raise ValueError("Input 'df' must be a pandas DataFrame.")
+            if df.empty:
+                raise ValueError("Input DataFrame is empty.")
+            if not all(isinstance(col, str) for col in df.columns):
+                raise ValueError("All column names in the DataFrame must be strings.")
+            if 'adf' not in self.test_config or 'max_diff' not in self.test_config['adf']:
+                raise KeyError("test_config must contain 'adf' with 'max_diff' specified.")
+
+            logger.info("Starting stationarity check for DataFrame with columns: %s", df.columns.tolist())
+
+            stationary_df: pd.DataFrame = df.copy()
+            report: Dict[str, Dict[str, Union[int, str]]] = {}
+            full_results: Dict[str, List[Dict]] = {}
+            pbar = tqdm(df.columns, desc="Stationarity Check")
+
+            for col in pbar:
+                pbar.set_description(f"Stationarity {col}")
+                if col not in df.columns:
+                    logger.warning("Column %s not found in DataFrame. Skipping.", col)
+                    continue
+
+                current_series: pd.Series = df[col]
+                if current_series.empty:
+                    logger.warning("Column %s is empty. Skipping.", col)
+                    continue
+
+                diff_count: int = 0
+                col_results: List[Dict] = []
+
+                for _ in range(self.test_config['adf']['max_diff'] + 1):
+                    test_results = self._run_test_battery(current_series.dropna())
+                    col_results.append(test_results)
+                    
+                    if self._is_stationary(test_results):
+                        break
+                    
+                    # Apply differencing
+                    current_series = current_series.diff()
+                    diff_count += 1
+
+                stationary_df[col] = current_series
+                full_results[col] = col_results
+                report[col] = {
+                    'diffs_applied': diff_count,
+                    'final_status': 'stationary' if diff_count < self.test_config['adf']['max_diff'] else 'non-stationary'
+                }
+                
+                if self.verbose:
+                    logger.info(f"{col}: {diff_count} differences applied")
+                    logger.info("Last test results: %s", {k: v for k, v in test_results.items()})
+
+            if not report:
+                raise RuntimeError("No columns were processed. Check input data and configuration.")
+
+            max_diff = max(v['diffs_applied'] for v in report.values())
+            stationary_df = stationary_df.iloc[max_diff:]
+            logger.info("Stationarity check completed. Max differences applied: %d", max_diff)
+            return stationary_df, report, full_results
+        except Exception as e:
+            logger.error("Error in check_stationarity: %s", e)
+            raise
 
 
 if __name__ == "__main__":

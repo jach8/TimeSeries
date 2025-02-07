@@ -1,3 +1,9 @@
+
+"""
+Testing Data Class to generate random data for testing purposes
+
+"""
+
 import numpy as np 
 import pandas as pd 
 import os

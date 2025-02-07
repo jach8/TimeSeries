@@ -81,7 +81,7 @@ if __name__ == "__main__":
     # print(x.head().iloc[:,:])
     # Initialize the analysis
     a = Analyze(verbose=False)
-    d = a.results(x, y, decompose=True)
+    d = a.results(x, y, decompose=False)
     
     print("\nNew Data with Stationarity Transformation:")
     print(d['new_data'])
@@ -93,4 +93,4 @@ if __name__ == "__main__":
     print(f"Significant Granger causes: {d['causality']}")
 
     print("\nVAR Model Summary:")
-    # print(d['var_model'].summary())
+    print(d['var_model'].summary())
