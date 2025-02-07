@@ -73,24 +73,22 @@ if __name__ == "__main__":
     # Example usage
     import pandas as pd
     from src.data import *
+    from model_results_agent import ModelResultsAgent
+    
+    # Get test data
     x, y = test_data1(return_xy=True, path_to_src='src/')
     x = x.dropna(axis = 1)
-    print(x.shape, y.shape)
-    
     y.name = 'spy'
-    # print(x.head().iloc[:,:])
+    
     # Initialize the analysis
     a = Analyze(verbose=False)
-    d = a.results(x, y, decompose=False)
+    results = a.results(x, y, decompose=False)
     
-    print("\nNew Data with Stationarity Transformation:")
-    print(d['new_data'])
-
-    print("\Stationary Analysis:")
-    print(d['stationarity_report'])
+    # Generate markdown summary
+    agent = ModelResultsAgent()
+    markdown_summary = agent.generate_summary(results, 'spy')
+    # markdown_summary = agent.generate_summary(results)
     
-    print("\nKey Findings:")
-    print(f"Significant Granger causes: {d['causality']}")
-
-    print("\nVAR Model Summary:")
-    print(d['var_model'].summary())
+    # Save markdown summary
+    with open('analysis_results.md', 'w') as f:
+        f.write(markdown_summary)

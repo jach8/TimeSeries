@@ -216,6 +216,12 @@ class StationaryTests:
     def kpss_test(series: pd.Series, alpha: float = 0.05, regression: str = 'c') -> Dict:
         """
         Kwiatkowski-Phillips-Schmidt-Shin (KPSS) test.
+    
+        - Used for testing if an observable time series is stationary around a determinstic trend. 
+        - The absense of a unit root in a time series indicates a trend-stationary process.
+        - This means that the mean of the series can be growing or decreasing over time. 
+        - In a presnece of a shock, trend stationary process are mean-reverting. 
+
 
         Null Hypothesis (H0): The process is trend-stationary.
         Alternative Hypothesis (H1): The process has a unit root (non-stationary).

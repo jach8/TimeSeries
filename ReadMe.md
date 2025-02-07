@@ -48,9 +48,12 @@ y = pd.Series(...)  # Replace with your target Series
 
 # Example configuration
 stationarity_cfg = {
-    'adf': {'max_diff': 4, 'significance': 0.05},
+    'adf': {'max_diff': 5, 'significance': 0.05},
     'kpss': {'significance': 0.05},
-    'structural_break': False
+    'pp': {'significance': 0.05},
+    'structural_break': True,
+    'gls': False,
+    'nonlinear': True
 }
 
 causality_cfg = {
@@ -77,6 +80,15 @@ print(results)
 ### StationaryTests
 
 The `StationaryTests` class in `stationary_checks.py` is used for performing various stationarity tests. Below is an example of how to use it:
+
+For the configuration you can change the parameters as needed. 
+  1. `adf`: Unit Root Test for Stationarity
+  2. `kpss`: Test for Trend Stationarity
+  3. `pp`: Phillips-Perron Test for Unit root 
+  4. `structural_break`: Zivot Andrews Test stationarity with a Structural Break (shock)
+  5. `gls`: DFGLS test for unit Root.  
+  6. `nonlinear`: KSS Test for Non-Linear Stationarity
+
 
 ```python
 import pandas as pd

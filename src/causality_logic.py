@@ -56,6 +56,15 @@ class CausalityAnalyzer:
     @staticmethod
     def __granger_causality(target: pd.Series, cause: pd.Series, maxlags: int = 3) -> Dict[Tuple[str, str], pd.DataFrame]:
         """
+            To granger cause, means that the past values of x2 (the cause) have a statistically significant effect on the current value of x1 (the target). 
+            - Taking past values of x1 into account as regressors. 
+                If the p-values are below a threshold, we reject the null hypothesis that x2 does not granger cause x1. 
+            
+            - H0: The time series in the second column, x2, DOES NOT Granger Cause the time series in the first column, x1.    
+            - H1: The time series in the second column, x2 does Granger cause the time series in the first column, x1.
+            
+            We want to dis-prove the null hypothess that x2 does not cause x1, ie. We are looking for small p-values. 
+        
         Wrapper Method for statsmodels.tsa.stattools.grangercausalitytests: 
             - Only pass a dataframe or np.arry of 2 variables in the grangercausalitytests function.
             - Four tests for granger non-causality of 2 time series:
@@ -162,6 +171,7 @@ class CausalityAnalyzer:
     
     def instantaneous_causality(self, fit: VARResults, data: pd.DataFrame, target: str) -> List[Tuple[str, str]]:
         """
+        Instantaneous causality reflects a non-zero correlation between the variables in the system. 
         Perform Instantaneous causality test from the Var Model Fit.
         
         Parameters:

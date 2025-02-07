@@ -59,7 +59,11 @@ class AnalyzeCorrelation:
             decompose: Whether to perform PCA decomposition
             verbose: Enable verbose output
             stationarity_config: Configuration for stationarity tests
+                example:
+                    
+            
             causality_config: Configuration for causality analysis
+        
 
         Raises:
             DataValidationError: If input data validation fails
