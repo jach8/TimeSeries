@@ -1,6 +1,6 @@
-from src.correlation import AnalyzeCorrelation
-from src.causality_logic import CausalityAnalyzer
-from src.stationary_checks import StationaryTests
+from .correlation import AnalyzeCorrelation
+from .causality_logic import CausalityAnalyzer
+from .stationary_checks import StationaryTests
 
 
 class Analyze:

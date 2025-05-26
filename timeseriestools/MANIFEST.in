@@ -1,0 +1,31 @@
+# Documentation
+include README.md
+include README_DEV.md
+include CONTRIBUTING.md
+include LICENSE
+include CHANGELOG.md
+
+# Configuration
+include pyproject.toml
+include setup.py
+include requirements.txt
+include requirements-dev.txt
+
+# Package data
+recursive-include timeseriestools/test_data *.pkl
+recursive-include timeseriestools/test_data *.csv
+
+# Examples
+recursive-include examples *.py
+recursive-include examples *.ipynb
+recursive-include examples *.md
+recursive-include examples *.txt
+
+# Tests
+recursive-include tests *.py
+
+# Exclude
+global-exclude *.py[cod]
+global-exclude __pycache__
+global-exclude *.so
+global-exclude .DS_Store

@@ -1,0 +1,63 @@
+[build-system]
+requires = ["setuptools>=45", "wheel", "pip>=21.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "timeseriestools"
+version = "0.1.0"
+description = "A comprehensive Python package for time series analysis"
+readme = "README.md"
+authors = [
+    {name = "TimeSeriesTools Contributors", email = "contributors@timeseriestools.org"}
+]
+license = {file = "LICENSE"}
+requires-python = ">=3.8"
+dependencies = [
+    "pandas>=1.0.0",
+    "numpy>=1.18.0",
+    "statsmodels>=0.13.0",
+    "scikit-learn>=0.24.0",
+    "arch>=5.0.0",
+    "pmdarima>=2.0.0",
+    "tqdm>=4.60.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=3.0",
+    "black>=22.0",
+    "isort>=5.0",
+    "mypy>=0.9",
+    "flake8>=4.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/username/timeseriestools"
+Documentation = "https://github.com/username/timeseriestools/docs"
+Repository = "https://github.com/username/timeseriestools.git"
+Issues = "https://github.com/username/timeseriestools/issues"
+
+[tool.setuptools]
+packages = ["timeseriestools"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+addopts = "-v --cov=timeseriestools"
+
+[tool.black]
+line-length = 88
+target-version = ["py38"]
+include = '\.pyi?$'
+
+[tool.isort]
+profile = "black"
+multi_line_output = 3
+line_length = 88
+
+[tool.mypy]
+python_version = "3.8"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true

@@ -1,152 +1,143 @@
-# TimeSeriesModels
+# TimeSeriesTools
 
-This project contains Python scripts for analyzing and modeling time series data. It includes classes and methods for performing various time series analyses, such as stationarity tests, PCA decomposition, VAR modeling, and Granger causality tests.
+A comprehensive Python package for time series analysis, focusing on causality testing, correlation analysis, and stationarity checks.
 
-## Files
+## Features
 
-- `main.py`: Main entry point for running the analysis.
-- `correlation.py`: Contains the `AnalyzeCorrelation` class for performing correlation analysis, including stationarity tests, PCA decomposition, VAR modeling, and Granger causality tests.
-- `stationary_checks.py`: Contains the `StationaryTests` class for performing various stationarity tests.
-- `causality_logic.py`: Contains the `CausalityAnalyzer` class for performing causality tests.
-- `data.py`: Contains functions for loading and generating test data.
+- **Causality Analysis**: Implement various causality tests including Granger causality and instantaneous causality
+- **Correlation Analysis**: Perform correlation analysis with built-in stationarity checks
+- **Stationarity Testing**: Multiple stationarity tests including ADF, KPSS, Phillips-Perron, and more
+- **Visualization**: Generate insightful visualizations of time series relationships
+- **Type Safety**: Full type hint coverage for better code reliability
+- **Documentation**: Comprehensive API documentation with examples
 
-## Usage
+## Installation
 
-### Analyze
-
-The `Analyze` class in `main.py` is used for analyzing the correlation between two time series. Below is an example of how to use it:
-
-```python
-import pandas as pd
-from src.data import random_test_data
-from main import Analyze
-
-# Load your data into x (features) and y (target)
-x, y = random_test_data(n=500, return_xy=True)
-
-# Initialize the analysis
-analyzer = Analyze(verbose=True)
-
-# Run the analysis
-results = analyzer.results(x, y)
-
-# Print the results
-print(results)
+```bash
+pip install timeseriestools
 ```
 
-### AnalyzeCorrelation
-
-The `AnalyzeCorrelation` class in `correlation.py` is used for correlation analysis of time series data. Below is an example of how to use it:
+## Quick Start
 
 ```python
+import timeseriestools as ts
 import pandas as pd
-from src.correlation import AnalyzeCorrelation
 
-# Load your data into x (features) and y (target)
-x = pd.DataFrame(...)  # Replace with your features DataFrame
-y = pd.Series(...)  # Replace with your target Series
+# Load example data
+x, y = ts.test_data1(return_xy=True)
 
-# Example configuration
-stationarity_cfg = {
+# Initialize analyzer
+analyzer = ts.Analyze(verbose=True)
+
+# Run correlation analysis
+results = analyzer.analyze_correlation(x, y)
+
+# Access results
+print("\nStationarity Report:")
+print(results['stationarity_report'])
+
+print("\nCausality Results:")
+print(results['causality'])
+```
+
+## Advanced Usage
+
+### Custom Configuration
+
+```python
+# Configure stationarity tests
+stationarity_config = {
     'adf': {'max_diff': 5, 'significance': 0.05},
     'kpss': {'significance': 0.05},
     'pp': {'significance': 0.05},
     'structural_break': True,
-    'gls': False,
+    'gls': True,
     'nonlinear': True
 }
 
-causality_cfg = {
+# Configure causality tests
+causality_config = {
     'significance_level': 0.05,
-    'max_lag': 4
+    'max_lag': 3
 }
 
-# Initialize the analyzer
-analyzer = AnalyzeCorrelation(
-    x=x, y=y,
-    stationarity_config=stationarity_cfg,
-    causality_config=causality_cfg,
+# Initialize with custom config
+analyzer = ts.Analyze(
     verbose=True,
-    decompose=True
+    stationarity_config=stationarity_config,
+    causality_config=causality_config
 )
-
-# Run the analysis
-results = analyzer.analyze_relationships()
-
-# Print the results
-print(results)
 ```
 
-### StationaryTests
-
-The `StationaryTests` class in `stationary_checks.py` is used for performing various stationarity tests. Below is an example of how to use it:
-
-For the configuration you can change the parameters as needed. 
-  1. `adf`: Unit Root Test for Stationarity
-  2. `kpss`: Test for Trend Stationarity
-  3. `pp`: Phillips-Perron Test for Unit root 
-  4. `structural_break`: Zivot Andrews Test stationarity with a Structural Break (shock)
-  5. `gls`: DFGLS test for unit Root.  
-  6. `nonlinear`: KSS Test for Non-Linear Stationarity
-
+### Working with Custom Data
 
 ```python
-import pandas as pd
-from src.stationary_checks import StationaryTests
+# Load your own time series data
+data = pd.read_csv('your_data.csv', parse_dates=['date'], index_col='date')
 
-# Load your data into a DataFrame
-data = pd.DataFrame(...)  # Replace with your DataFrame
+# Split into features and target
+x = data.drop('target', axis=1)
+y = data['target']
 
-# Initialize the StationaryTests class
-st = StationaryTests(verbose=True)
-
-# Check stationarity
-stationary_df, report, results = st.check_stationarity(data)
-
-# Print the results
-print(report)
+# Run analysis
+analyzer = ts.Analyze()
+results = analyzer.analyze_correlation(x, y, decompose=True)
 ```
 
-### CausalityAnalyzer
+## Documentation
 
-The `CausalityAnalyzer` class in `causality_logic.py` is used for performing causality tests. Below is an example of how to use it:
+For detailed API documentation and examples, see:
+- [Package Structure](package_structure.md)
+- [API Documentation](api_documentation.md)
+- [Example Notebooks](examples/notebooks/)
 
-```python
-import pandas as pd
-from src.causality_logic import CausalityAnalyzer
+## Contributing
 
-# Load your data into a DataFrame
-data = pd.DataFrame(...)  # Replace with your DataFrame
+We welcome contributions! Please see our [Contributing Guidelines](CONTRIBUTING.md) for details.
 
-# Initialize the CausalityAnalyzer class
-ca = CausalityAnalyzer(significance_level=0.05, max_lag=4)
+### Development Setup
 
-# Perform causality tests
-causality_results = ca.causality_tests(data, target='target_column')
-
-# Print the results
-print(causality_results)
-```
-
-## Dependencies
-
-- pandas
-- numpy
-- statsmodels
-- scikit-learn
-- arch
-- matplotlib
-- pmdarima
-- tqdm
-
-## Installation
-
-To install the required dependencies, run:
-
+1. Clone the repository:
 ```bash
-pip install pandas numpy statsmodels scikit-learn arch matplotlib pmdarima tqdm
+git clone https://github.com/username/timeseriestools.git
+cd timeseriestools
+```
+
+2. Create a virtual environment:
+```bash
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+```
+
+3. Install dependencies:
+```bash
+pip install -r requirements.txt
+```
+
+4. Run tests:
+```bash
+pytest tests/
 ```
 
 ## License
 
-This project is licensed under the MIT License.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## Citation
+
+If you use TimeSeriesTools in your research, please cite:
+
+```bibtex
+@software{timeseriestools2025,
+  title = {TimeSeriesTools: A Python Package for Time Series Analysis},
+  author = {Authors},
+  year = {2025},
+  version = {0.1.0}
+}
+```
+
+## Acknowledgments
+
+- Built with inspiration from statsmodels and pandas
+- Includes implementations based on academic papers in time series analysis
+- Thanks to all contributors and the open source community
